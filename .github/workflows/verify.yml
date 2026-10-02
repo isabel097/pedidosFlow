@@ -29,10 +29,8 @@ jobs:
           mkdir -p .artifact/.github/workflows
           cp .github/workflows/verify.yml .artifact/.github/workflows/verify.yml
           cp -R dist .artifact/dist
-          cd .artifact
-          zip -r ../PedidosFlow-capturas.zip .
       - uses: actions/upload-artifact@v4
         with:
           name: PedidosFlow-capturas
-          path: PedidosFlow-capturas.zip
+          path: .artifact
           retention-days: 7
