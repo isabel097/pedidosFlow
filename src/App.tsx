@@ -1919,22 +1919,165 @@ function NotificationsPanel({ notifs, onClose, onMarkRead }: {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const persistedDecisions = readJson<QuantityDecision[]>(QUANTITY_DECISION_KEY, []);
   const [mode, setMode] = useState<Mode>('platform');
   const [nav, setNav] = useState<Nav>('pedidos');
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
-  const [change154State, setChange154State] = useState<Change154State>(null);
-  const [change155State, setChange155State] = useState<Change155State>(null);
+  const [change154State, setChange154State] = useState<Change154State>(persistedDecisions.some(d => d.orderId === '#154' && d.result === 'approved') ? 'approved' : null);
+  const [change155State, setChange155State] = useState<Change155State>(persistedDecisions.some(d => d.orderId === '#155' && d.result === 'rejected') ? 'rejected' : null);
   const [order154Qty, setOrder154Qty] = useState(() => leerCantidadGuardada('#154', 20));
   const [pendingQty154, setPendingQty154] = useState<number | null>(null);
   const [photoState, setPhotoState] = useState<PhotoState>(null);
-  const [checklist, setChecklist] = useState<Record<string, boolean[]>>(INITIAL_CHECKLIST);
+  const [checklist, setChecklist] = useState<Record<string, boolean[]>>(() => readJson<Record<string, boolean[]>>(CHECKLIST_KEY, INITIAL_CHECKLIST));
   const [notifs, setNotifs] = useState<Notif[]>(INITIAL_NOTIFS);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [dynamicOrders, setDynamicOrders] = useState<BotOrder[]>([]);
+  const [dynamicOrders, setDynamicOrders] = useState<BotOrder[]>(() => readJson<BotOrder[]>('pedidosflow_dynamic_orders_v1', []));
   const nextOrderIdRef = useRef(157);
   const [validationRules, setValidationRules] = useState<RuleMatrix>(DEFAULT_RULES);
-  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>(() => readJson<ChangeRequest[]>('pedidosflow_change_requests_v1', []));
   const [pendingPhotoOrder, setPendingPhotoOrder] = useState<BotOrder | null>(null);
+
+  const [quantityDecisions, setQuantityDecisions] = useState<QuantityDecision[]>(persistedDecisions);
+
+  useEffect(() => writeJson(QUANTITY_DECISION_KEY, quantityDecisions), [quantityDecisions]);
+  useEffect(() => writeJson(CHECKLIST_KEY, checklist), [checklist]);
+  useEffect(() => writeJson('pedidosflow_dynamic_orders_v1', dynamicOrders), [dynamicOrders]);
+  useEffect(() => writeJson('pedidosflow_change_requests_v1', changeRequests), [changeRequests]);
+  useEffect(() => {
+    const ids = [...STATIC_ORDERS, ...dynamicOrders].map(o => Number(o.id.replace(/[^0-9]/g, ''))).filter(Number.isFinite);
+    nextOrderIdRef.current = Math.max(156, ...ids) + 1;
+  }, [dynamicOrders]);
+
+  const unread = notifs.filter(n => !n.read).length;
+
+  const addNotif = (n: Omit<Notif, 'id' | 'read'>) =>
+    setNotifs(prev => [{ ...n, id: Date.now(), read: false }, ...prev]);
+
+  const handleOrderCreated = (order: BotOrder) => {
+    const id = nextOrderIdRef.current;
+    nextOrderIdRef.current += 1;
+    const newOrder = { ...order, id: `#${id}` };
+    setDynamicOrders(prev => [newOrder, ...prev]);
+    return newOrder;
+  };
+
+  const handlePhotoReviewNeeded = (order: BotOrder) => {
+    setPendingPhotoOrder(order);
+    setPhotoState('pending-review');
+    addNotif({ text: 'Revisión de diseño requerida', sub: `${order.id} – ${order.client} · diseño personalizado`, type: 'info' });
+  };
+
+  const handleChangeRequested = (req: { orderId: string; client: string; field: string; newValue: string }) => {
+    const newReq: ChangeRequest = {
+      id: `CR-${Date.now()}`,
+      ...req,
+      status: 'pending',
+      timestamp: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+    };
+    setChangeRequests(prev => [newReq, ...prev]);
+    addNotif({ text: 'Cambio requiere revisión del encargado', sub: `Pedido ${req.orderId} – ${req.field}: ${req.newValue}`, type: 'warning' });
+  };
+
+  const handleApproveChangeReq = (id: string) => {
+    setChangeRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'approved' } : r));
+    addNotif({ text: 'Cambio aprobado por encargado', sub: `Solicitud ${id}`, type: 'success' });
+  };
+
+  const handleRejectChangeReq = (id: string) => {
+    setChangeRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected' } : r));
+    addNotif({ text: 'Cambio rechazado por encargado', sub: `Solicitud ${id}`, type: 'danger' });
+  };
+
+  const toggleChecklist = (orderId: string, idx: number) => {
+    setChecklist(prev => {
+      const stages = [...(prev[orderId] || STAGES.map(() => false))];
+      stages[idx] = !stages[idx];
+      if (!stages[idx]) {
+        for (let i = idx + 1; i < stages.length; i++) stages[i] = false;
+      }
+      return { ...prev, [orderId]: stages };
+    });
+  };
+
+  const handleWaNavigate = (action: string) => {
+    if (action === 'go-orders') {
+      setMode('platform'); setNav('pedidos'); setSelectedOrder(null);
+    } else if (action.startsWith('go-validation-')) {
+      const orderId = normalizeOrderId(action.replace('go-validation-', ''));
+      setMode('platform'); setNav('pedidos'); setSelectedOrder(orderId);
+      const last = quantityDecisions.filter(d => d.orderId === orderId).slice(-1)[0];
+      if (orderId === '#154' && !last) setChange154State('validating');
+      if (orderId === '#155' && last?.result === 'rejected') setChange155State('rejected');
+    } else if (action === 'go-cambios') {
+      setMode('platform'); setNav('cambios'); setSelectedOrder(null);
+    } else if (action === 'go-photo-review') {
+      setMode('platform'); setNav('cambios');
+    }
+  };
+
+  const handleRequestQuantityChange = (pedidoId: string, cantidadNueva: unknown): EvaluacionCambioCantidad => {
+    const orderId = normalizeOrderId(pedidoId);
+    const allOrdersNow = [...dynamicOrders, ...STATIC_ORDERS];
+    const order = allOrdersNow.find(o => o.id === orderId);
+    if (!order) return { resultado: 'invalido', motivo: `No se encontró el pedido ${orderId}.` };
+
+    const etapa = derivarEtapa(checklist[orderId]);
+    const evaluacion = evaluarCambioCantidad(etapa, cantidadNueva);
+    const formato = validarFormatoCantidad(cantidadNueva);
+    const previousQty = orderId === '#154' ? order154Qty : parseQuantity(order.qty);
+    if (!formato.valido) return evaluacion;
+
+    if (evaluacion.resultado === 'aplicado') {
+      setPendingQty154(formato.cantidad);
+      if (orderId === '#154') setChange154State('validating');
+      return evaluacion;
+    }
+
+    if (evaluacion.resultado === 'rechazado' && orderId === '#155') {
+      const decision: QuantityDecision = {
+        orderId,
+        previousValue: previousQty,
+        newValue: formato.cantidad,
+        result: 'rejected',
+        reason: evaluacion.motivo,
+        timestamp: new Date().toISOString(),
+      };
+      setQuantityDecisions(prev => [...prev.filter(d => d.orderId !== orderId), decision]);
+      setChange155State('rejected');
+      addNotif({ text: 'Cambio rechazado automáticamente', sub: `Pedido ${orderId} – Cantidad: ${formato.cantidad} personas`, type: 'danger' });
+    }
+
+    return evaluacion;
+  };
+
+  const handleApproveChange154 = () => {
+    if (pendingQty154 === null) return;
+    const cantidadAnterior = order154Qty;
+    setOrder154Qty(pendingQty154);
+    guardarCantidad('#154', pendingQty154);
+    setChange154State('approved');
+    const decision: QuantityDecision = {
+      orderId: '#154',
+      previousValue: cantidadAnterior,
+      newValue: pendingQty154,
+      result: 'approved',
+      reason: 'Cambio aprobado automáticamente: el pedido aún no ha iniciado producción.',
+      timestamp: new Date().toISOString(),
+    };
+    setQuantityDecisions(prev => [...prev.filter(d => d.orderId !== '#154'), decision]);
+    addNotif({ text: 'Cambio aprobado automáticamente', sub: `Pedido #154 – Cantidad: ${cantidadAnterior} → ${pendingQty154} personas`, type: 'success' });
+    setPendingQty154(null);
+  };
+
+  const handleApproveManual155 = () => {
+    setChange155State('manually-approved');
+    addNotif({ text: 'Cambio aprobado manualmente', sub: 'Pedido #155 – Responsable: Administrador', type: 'warning' });
+  };
+
+  const handleMaintainReject155 = () => {
+    setChange155State('maintained');
+    addNotif({ text: 'Rechazo confirmado por encargado', sub: 'Pedido #155 – Decisión registrada', type: 'danger' });
+  };
 
   const unread = notifs.filter(n => !n.read).length;
 
