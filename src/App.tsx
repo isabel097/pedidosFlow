@@ -426,13 +426,14 @@ function PhotoReviewCard({ onAccept, onReject, order }: { onAccept: () => void; 
 
 // ─── Order detail ─────────────────────────────────────────────────────────────
 
-function OrderDetailView({ orderId, order154Qty, change154State, change155State, checklist, quantityDecisions, onApproveChange, onClose, onGoChanges, dynamicOrders }: {
+function OrderDetailView({ orderId, order154Qty, change154State, change155State, checklist, quantityDecisions, pendingQty, onApproveChange, onClose, onGoChanges, dynamicOrders }: {
   orderId: string;
   order154Qty: number;
   change154State: Change154State;
   change155State: Change155State;
   checklist: Record<string, boolean[]>;
   quantityDecisions: QuantityDecision[];
+  pendingQty: number | null;
   onApproveChange: () => void;
   onClose: () => void;
   onGoChanges: () => void;
@@ -480,7 +481,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
           </div>
 
           {orderId === '#154' && change154State === 'validating' && (
-            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} />
+            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} pendingQty={pendingQty ?? 25} />
           )}
 
           {orderId === '#154' && change154State === 'approved' && lastDecision?.result === 'approved' && (
@@ -505,7 +506,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
 
 // ─── Validation panels ────────────────────────────────────────────────────────
 
-function ValidationPanel154({ onApprove, checklist, pendingQty }: { onApprove: () => void; checklist: boolean[]; pendingQty?: number }) {
+function ValidationPanel154({ onApprove, checklist, pendingQty }: { onApprove: () => void; checklist: boolean[]; pendingQty: number }) {
   const doneCount = checklist.filter(Boolean).length;
   const currentStage = doneCount === 0 ? 'No iniciada' : STAGES[doneCount - 1];
   const stageOk = doneCount <= 1;
@@ -515,7 +516,7 @@ function ValidationPanel154({ onApprove, checklist, pendingQty }: { onApprove: (
       <div className="flex items-center gap-2 mb-1">
         <h3 className="font-display font-semibold text-slate-800">Motor de Validación</h3>
       </div>
-      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cantidad 20 → 25 personas · Pedido #154</p>
+      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cantidad 20 → {pendingQty} personas · Pedido #154</p>
       <div className="space-y-2 mb-4">
         <RuleRow label="Producción iniciada" value={doneCount > 0 ? 'SI' : 'NO'} pass={doneCount === 0} />
         <RuleRow label={`Etapa actual: ${currentStage} (${doneCount}/${STAGES.length})`} value={stageOk ? 'VIABLE' : 'BLOQUEADO'} pass={stageOk} />
@@ -2190,6 +2191,7 @@ export default function App() {
           change155State={change155State}
           checklist={checklist}
           quantityDecisions={quantityDecisions}
+          pendingQty={pendingQty154}
           onApproveChange={handleApproveChange154}
           onClose={() => setSelectedOrder(null)}
           onGoChanges={() => { setSelectedOrder(null); setNav('cambios'); }}
@@ -2299,7 +2301,7 @@ export default function App() {
               onNavigate={handleWaNavigate}
               onOrderCreated={handleOrderCreated}
               onNotify={addNotif}
-              allOrders={[...dynamicOrders, ...STATIC_ORDERS]}
+              allOrders={[...dynamicOrders, ...STATIC_ORDERS.map(o => o.id === '#154' ? { ...o, qty: `${order154Qty} personas` } : o)]}
               onChangeRequested={handleChangeRequested}
               onPhotoReviewNeeded={handlePhotoReviewNeeded}
               onRequestQuantityChange={handleRequestQuantityChange}
