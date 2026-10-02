@@ -6,6 +6,10 @@ html, body, #root {
   font-family: 'Inter', sans-serif;
 }
 
+body, button, input, textarea, select, option {
+  color: #000 !important;
+}
+
 h1, h2, h3, h4, h5, h6, .font-display {
   font-family: 'Outfit', sans-serif;
 }
