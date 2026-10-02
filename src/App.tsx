@@ -496,7 +496,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
         </div>
 
         <div>
-          <VersionHistory orderId={orderId} order154Qty={order154Qty} change154State={change154State} change155State={change155State} />
+          <VersionHistory orderId={orderId} order154Qty={order154Qty} quantityDecisions={quantityDecisions} />
         </div>
       </div>
     </div>
@@ -585,19 +585,22 @@ function DecisionHistoryPanel({ state }: { state: Change155State }) {
 
 // ─── Version history ──────────────────────────────────────────────────────────
 
-function VersionHistory({ orderId, order154Qty, change154State, change155State }: {
-  orderId: string; order154Qty: number; change154State: Change154State; change155State: Change155State;
+function VersionHistory({ orderId, order154Qty, quantityDecisions }: {
+  orderId: string;
+  order154Qty: number;
+  quantityDecisions: QuantityDecision[];
 }) {
-  const is154 = orderId === '#154';
-
-  type Entry = { date: string; time: string; label: string; detail: string; color: string };
-  const entries: Entry[] = [
-    { date: '27/08', time: '09:15', label: 'Versión 1', detail: is154 ? '20 personas · Color azul · Entrega 30/08' : '20 personas · Color rosado · Entrega 01/09', color: 'bg-blue-400 text-blue-600' },
-    ...(is154 && change154State !== null ? [{ date: '29/08', time: '11:20', label: 'Cambio solicitado', detail: '20 → 25 personas', color: 'bg-amber-400 text-amber-600' }] : []),
-    ...(is154 && change154State === 'approved' ? [{ date: '29/08', time: '11:21', label: 'Versión 2', detail: `${order154Qty} personas · Color azul · Entrega 30/08`, color: 'bg-emerald-500 text-emerald-600' }] : []),
-    ...(!is154 && change155State !== null ? [{ date: '29/08', time: '14:33', label: 'Cambio rechazado', detail: 'Cambio de diseño – Rechazo automático', color: 'bg-red-400 text-red-600' }] : []),
-    ...(!is154 && change155State === 'manually-approved' ? [{ date: '29/08', time: '15:04', label: 'Aprobado manualmente', detail: 'Responsable: Administrador', color: 'bg-amber-400 text-amber-600' }] : []),
-    ...(!is154 && change155State === 'maintained' ? [{ date: '29/08', time: '15:04', label: 'Rechazo confirmado', detail: 'Responsable: Administrador', color: 'bg-slate-400 text-slate-500' }] : []),
+  const knownOrder = STATIC_ORDERS.find(o => o.id === orderId);
+  const decisions = quantityDecisions.filter(d => d.orderId === orderId);
+  const initialQty = orderId === '#154' ? 20 : parseQuantity(knownOrder?.qty ?? '0');
+  const entries = [
+    { label: 'Versión inicial', detail: `${initialQty} personas · ${knownOrder?.product ?? 'Torta personalizada'} · Entrega ${knownOrder?.delivery ?? '—'}`, color: 'bg-blue-400 text-blue-600', timestamp: '' },
+    ...decisions.map(d => ({
+      label: d.result === 'approved' ? 'Cambio aprobado' : 'Cambio rechazado',
+      detail: `${d.previousValue} → ${d.newValue} personas · ${d.reason}`,
+      color: d.result === 'approved' ? 'bg-emerald-500 text-emerald-600' : 'bg-red-400 text-red-600',
+      timestamp: new Date(d.timestamp).toLocaleString('es-CO'),
+    })),
   ];
 
   return (
@@ -606,10 +609,10 @@ function VersionHistory({ orderId, order154Qty, change154State, change155State }
       <div className="relative pl-4">
         <div className="absolute left-1.5 top-2 bottom-2 w-px bg-slate-100" />
         {entries.map((e, i) => (
-          <div key={i} className="relative mb-5 last:mb-0">
+          <div key={`${orderId}-version-${i}`} className="relative mb-5 last:mb-0">
             <div className={`absolute -left-2.5 top-1 w-3 h-3 rounded-full border-2 border-white ${e.color.split(' ')[0]}`} />
             <div className={`text-xs font-semibold mb-0.5 ${e.color.split(' ')[1]}`}>{e.label}</div>
-            <div className="text-xs text-slate-400 font-mono-data mb-1">{e.date} – {e.time}</div>
+            <div className="text-xs text-slate-400 font-mono-data mb-1">{e.timestamp || 'Inicial'}</div>
             <div className="bg-slate-50 rounded-lg p-2 text-xs text-slate-600 border border-slate-100">{e.detail}</div>
           </div>
         ))}
