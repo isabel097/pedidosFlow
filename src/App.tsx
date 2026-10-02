@@ -16,8 +16,8 @@ type WaPhase =
   | 'np-camisa-qty' | 'np-camisa-color' | 'np-camisa-talla' | 'np-camisa-date' | 'np-camisa-confirm'
   | 'np-floral-flowers' | 'np-floral-size' | 'np-floral-date' | 'np-floral-confirm'
   | 'order-done'
-  | 'mod-name' | 'mod-what' | 'mod-value' | 'mod-date' | 'mod-done'
-  | 'consult-name' | 'consult-show'
+  | 'mod-order' | 'mod-name' | 'mod-what' | 'mod-value' | 'mod-date' | 'mod-done'
+  | 'consult-order' | 'consult-name' | 'consult-show'
   | 'my-orders';
 
 interface WaMsg {
@@ -70,6 +70,15 @@ interface ChangeRequest {
   timestamp: string;
 }
 
+interface QuantityDecision {
+  orderId: string;
+  previousValue: number;
+  newValue: number;
+  result: 'approved' | 'rejected';
+  reason: string;
+  timestamp: string;
+}
+
 // ─── Production stages ────────────────────────────────────────────────────────
 const STAGES = [
   'Materiales preparados',
@@ -86,7 +95,7 @@ const STAGES = [
 
 const INITIAL_CHECKLIST: Record<string, boolean[]> = {
   '#154': [false, false, false, false, false, false, false],
-  '#155': [true, true, true, false, false, false, false],
+  '#155': [true, true, true, true, true, true, true],
   '#153': [true, true, false, false, false, false, false],
   '#152': [false, false, false, false, false, false, false],
 };
@@ -99,7 +108,7 @@ const INITIAL_NOTIFS: Notif[] = [
 
 const STATIC_ORDERS: BotOrder[] = [
   { id: '#154', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '30/08 – 16:00', status: 'Confirmado' },
-  { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '01/09 – 12:00', status: 'En producción' },
+  { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '01/09 – 12:00', status: 'Control final' },
   { id: '#156', client: 'María Torres', product: 'Torta personalizada', qty: '35 personas', delivery: '02/09 – 15:00', status: 'Pendiente de revisión' },
   { id: '#153', client: 'Daniel Ruiz', product: '20 camisetas', qty: '20 unidades', delivery: '30/08 – 18:00', status: 'En producción' },
   { id: '#152', client: 'Camila Pérez', product: 'Arreglo floral', qty: '1 arreglo', delivery: '31/08 – 10:00', status: 'Confirmado' },
@@ -161,6 +170,32 @@ function guardarCantidad(pedidoId: string, cantidad: number): void {
   }
 }
 
+const QUANTITY_DECISION_KEY = 'pedidosflow_quantity_decisions_v1';
+const CHECKLIST_KEY = 'pedidosflow_checklist_v1';
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson<T>(key: string, value: T): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function normalizeOrderId(value: string): string {
+  const digits = value.replace(/[^0-9]/g, '');
+  return digits ? `#${digits}` : value.trim();
+}
+
+function parseQuantity(value: string): number {
+  const n = Number(value.replace(/[^0-9]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ─── Helper components ────────────────────────────────────────────────────────
 
 function Dot({ type }: { type: 'success' | 'danger' | 'warning' | 'info' }) {
@@ -182,6 +217,7 @@ function Badge({ type, children }: { type: 'success' | 'danger' | 'warning' | 'i
 function StatusBadge({ status }: { status: string }) {
   if (status === 'Confirmado') return <Badge type="info">Confirmado</Badge>;
   if (status === 'En producción') return <Badge type="warning">En producción</Badge>;
+  if (status === 'Control final') return <Badge type="danger">Control final</Badge>;
   if (status === 'Entregado') return <Badge type="success">Entregado</Badge>;
   if (status === 'Pendiente de revisión') return <Badge type="neutral">Pendiente de revisión</Badge>;
   return <Badge type="neutral">{status}</Badge>;
