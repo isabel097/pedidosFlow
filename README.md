@@ -51,12 +51,27 @@ npm install
 npm run dev
 ```
 
-## Pruebas
+## Verificaciones
+
+Compilación de producción:
 
 ```bash
-npm test
+npm run build
+```
+
+Verificación de tipos:
+
+```bash
 npm run typecheck
 ```
+
+Formato:
+
+```bash
+npm run format
+```
+
+En este momento no se declara un `npm test` porque el repositorio todavía no contiene una suite automatizada de pruebas. La cobertura de los casos de aceptación del incremento queda registrada como trabajo pendiente en el Issue correspondiente.
 
 ## Flujo de trabajo
 
