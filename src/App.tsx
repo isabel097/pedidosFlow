@@ -239,7 +239,7 @@ function RuleRow({ label, value, pass }: { label: string; value: string; pass: b
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-function DashboardView({ onSelectOrder, order154Qty, change154State, change155State, photoState, onAcceptPhoto, onRejectPhoto, dynamicOrders }: {
+function DashboardView({ onSelectOrder, order154Qty, change154State, change155State, photoState, onAcceptPhoto, onRejectPhoto, dynamicOrders, pendingChangesCount }: {
   onSelectOrder: (id: string) => void;
   order154Qty: number;
   change154State: Change154State;
@@ -248,6 +248,7 @@ function DashboardView({ onSelectOrder, order154Qty, change154State, change155St
   onAcceptPhoto: () => void;
   onRejectPhoto: () => void;
   dynamicOrders: BotOrder[];
+  pendingChangesCount: number;
 }) {
   const staticOrders = STATIC_ORDERS.map(o =>
     o.id === '#154' ? { ...o, qty: `${order154Qty} personas` }
@@ -264,7 +265,7 @@ function DashboardView({ onSelectOrder, order154Qty, change154State, change155St
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Pedidos activos', value: String(activeCount), border: 'border-slate-200', bg: 'bg-slate-50', text: 'text-slate-700' },
-          { label: 'Cambios pendientes', value: change155State === 'rejected' ? '1' : '0', border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' },
+          { label: 'Cambios pendientes', value: String(pendingChangesCount), border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' },
           { label: 'En producción', value: String(inProdCount), border: 'border-blue-100', bg: 'bg-blue-50', text: 'text-blue-700' },
           { label: 'Revisiones pendientes', value: photoState === 'pending-review' ? '1' : '0', border: 'border-violet-100', bg: 'bg-violet-50', text: 'text-violet-700' },
         ].map(s => (
@@ -479,7 +480,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
           </div>
 
           {orderId === '#154' && change154State === 'validating' && (
-            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} pendingQty={quantityDecisions.find(() => false) ? undefined : undefined} />
+            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} />
           )}
 
           {orderId === '#154' && change154State === 'approved' && lastDecision?.result === 'approved' && (
@@ -495,7 +496,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
         </div>
 
         <div>
-          <VersionHistory orderId={orderId} order154Qty={order154Qty} change154State={change154State} change155State={change155State} quantityDecisions={quantityDecisions} />
+          <VersionHistory orderId={orderId} order154Qty={order154Qty} change154State={change154State} change155State={change155State} />
         </div>
       </div>
     </div>
@@ -644,7 +645,7 @@ function CambiosPendientesView({ change155State, photoState, changeRequests, pen
         <PhotoReviewCard onAccept={onAcceptPhoto} onReject={onRejectPhoto} />
       )}
 
-      {!resolved && change155State === 'rejected' && (
+      {false && !resolved && change155State === 'rejected' && (
         <div className="bg-white border border-red-200 rounded-xl overflow-hidden">
           <div className="bg-red-50 px-5 py-3 border-b border-red-100 flex items-center gap-2">
             <Dot type="danger" />
@@ -2169,7 +2170,7 @@ export default function App() {
 
   const sidebarItems: { id: Nav; label: string; badge?: number }[] = [
     { id: 'pedidos', label: 'Pedidos', badge: dynamicOrders.length + 5 },
-    { id: 'cambios', label: 'Cambios pendientes', badge: (change155State === 'rejected' ? 1 : 0) + changeRequests.filter(r => r.status === 'pending').length },
+    { id: 'cambios', label: 'Cambios pendientes', badge: changeRequests.filter(r => r.status === 'pending').length },
     { id: 'produccion', label: 'Producción', badge: 2 },
     { id: 'clientes', label: 'Clientes' },
     { id: 'historial', label: 'Historial' },
@@ -2185,6 +2186,7 @@ export default function App() {
           change154State={change154State}
           change155State={change155State}
           checklist={checklist}
+          quantityDecisions={quantityDecisions}
           onApproveChange={handleApproveChange154}
           onClose={() => setSelectedOrder(null)}
           onGoChanges={() => { setSelectedOrder(null); setNav('cambios'); }}
@@ -2194,7 +2196,7 @@ export default function App() {
     }
     switch (nav) {
       case 'pedidos':
-        return <DashboardView onSelectOrder={setSelectedOrder} order154Qty={order154Qty} change154State={change154State} change155State={change155State} photoState={photoState} onAcceptPhoto={() => { setPhotoState('accepted'); addNotif({ text: 'Diseño personalizado confirmado', sub: 'Pedido #156 – Diseño viable', type: 'success' }); }} onRejectPhoto={() => { setPhotoState('rejected'); addNotif({ text: 'Diseño no viable', sub: 'Pedido #156 – Cancelado', type: 'danger' }); }} dynamicOrders={dynamicOrders} />;
+        return <DashboardView onSelectOrder={setSelectedOrder} order154Qty={order154Qty} change154State={change154State} change155State={change155State} photoState={photoState} onAcceptPhoto={() => { setPhotoState('accepted'); addNotif({ text: 'Diseño personalizado confirmado', sub: 'Pedido #156 – Diseño viable', type: 'success' }); }} onRejectPhoto={() => { setPhotoState('rejected'); addNotif({ text: 'Diseño no viable', sub: 'Pedido #156 – Cancelado', type: 'danger' }); }} dynamicOrders={dynamicOrders} pendingChangesCount={changeRequests.filter(r => r.status === 'pending').length} />;
       case 'cambios':
         return <CambiosPendientesView
           change155State={change155State}
@@ -2222,7 +2224,7 @@ export default function App() {
       case 'produccion':
         return <ProduccionView checklist={checklist} onToggle={toggleChecklist} />;
       case 'historial':
-        return <HistorialView order154Qty={order154Qty} change154State={change154State} change155State={change155State} />;
+        return <HistorialView order154Qty={order154Qty} change154State={change154State} change155State={change155State} quantityDecisions={quantityDecisions} />;
       case 'clientes':
         return (
           <div className="space-y-5">
