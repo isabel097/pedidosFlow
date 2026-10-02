@@ -19,3 +19,20 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: Empaquetar entrega ejecutable
+        run: |
+          rm -rf .artifact
+          mkdir .artifact
+          cp -R src .artifact/src
+          cp -R docs .artifact/docs
+          cp index.html package.json package-lock.json pnpm-lock.yaml tsconfig.json vite.config.ts README.md .gitignore .artifact/
+          mkdir -p .artifact/.github/workflows
+          cp .github/workflows/verify.yml .artifact/.github/workflows/verify.yml
+          cp -R dist .artifact/dist
+          cd .artifact
+          zip -r ../PedidosFlow-capturas.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PedidosFlow-capturas
+          path: PedidosFlow-capturas.zip
+          retention-days: 7
