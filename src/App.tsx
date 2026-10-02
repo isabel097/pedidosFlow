@@ -1010,6 +1010,7 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
   const [draft, setDraft] = useState<OrderDraft>({});
   const [showCal, setShowCal] = useState(false);
   const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [textInput, setTextInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const now = () => {
@@ -1032,6 +1033,7 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
 
   const goMenu = () => {
     setDraft({});
+    setTextInput('');
     setShowCal(false);
     setPickedDate(null);
     addBot('De acuerdo. ¿En qué puedo ayudarte?');
@@ -1041,7 +1043,10 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
   const DATE_PHASES: WaPhase[] = ['np-torta-date', 'np-camisa-date', 'np-floral-date', 'mod-date'];
 
   const handle = (choice: string) => {
-    addUser(choice);
+    const value = choice.trim();
+    if (!value) return;
+    addUser(value);
+    setTextInput('');
 
     switch (phase) {
       // ── Menú principal ──────────────────────────────────────────
@@ -1050,11 +1055,11 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
           addBot('Para comenzar, ¿cuál es tu nombre y apellido?');
           setPhase('np-name');
         } else if (choice === 'Modificar pedido') {
-          addBot('Para verificar tu identidad, indica tu nombre y apellido completo.');
-          setPhase('mod-name');
+          addBot('Indica el número del pedido que deseas modificar. Puedes escribir 154 o #154.');
+          setPhase('mod-order');
         } else if (choice === 'Consultar pedido') {
-          addBot('Indica tu nombre y apellido para consultar tu pedido.');
-          setPhase('consult-name');
+          addBot('Indica el número del pedido que deseas consultar. Puedes escribir 154 o #154.');
+          setPhase('consult-order');
         } else if (choice === 'Mis pedidos') {
           const allList = allOrders.map(o => `— ${o.id} · ${o.product} · ${o.delivery} · ${o.status}`).join('\n');
           addBot(`Pedidos registrados en el sistema:\n\n${allList}`);
@@ -1263,6 +1268,20 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
         break;
 
       // ── Modificar pedido ─────────────────────────────────────────
+      case 'mod-order': {
+        const orderId = normalizeOrderId(choice);
+        const order = allOrders.find(o => o.id === orderId);
+        if (!order) {
+          addBot(`No encontramos el pedido ${orderId}. Verifica el número e intenta de nuevo.`);
+          setPhase('mod-order');
+          break;
+        }
+        setDraft(prev => ({ ...prev, modOrderId: order.id, modClient: order.client }));
+        addBot(`Pedido encontrado:\n\n${order.id} · ${order.product}\nCliente: ${order.client}\nCantidad actual: ${order.qty}\nEntrega: ${order.delivery}\nEstado: ${order.status}\n\n¿Qué deseas modificar?`);
+        setPhase('mod-what');
+        break;
+      }
+
       case 'mod-name': {
         const clientOrders = allOrders.filter(o => o.client.toLowerCase() === choice.toLowerCase());
         if (clientOrders.length === 0) {
@@ -1338,6 +1357,19 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
       }
 
       // ── Consultar pedido ─────────────────────────────────────────
+      case 'consult-order': {
+        const orderId = normalizeOrderId(choice);
+        const found = allOrders.find(o => o.id === orderId);
+        if (!found) {
+          addBot(`No encontramos el pedido ${orderId}. Verifica el número e intenta de nuevo.`);
+          setPhase('consult-order');
+          break;
+        }
+        addBot(`Pedido ${found.id}\nProducto: ${found.product}\nCantidad: ${found.qty}\nEntrega: ${found.delivery}\nEstado: ${found.status}`);
+        setPhase('consult-show');
+        break;
+      }
+
       case 'consult-name': {
         const found = allOrders.filter(o => o.client.toLowerCase() === choice.toLowerCase());
         if (found.length === 0) {
@@ -1416,6 +1448,22 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
         >
           Adjuntar foto de referencia
         </button>
+      );
+    }
+
+    if (phase === 'mod-order' || phase === 'consult-order') {
+      return (
+        <form className="space-y-2" onSubmit={e => { e.preventDefault(); handle(textInput); }}>
+          <input
+            value={textInput}
+            onChange={e => setTextInput(e.target.value)}
+            autoFocus
+            inputMode="numeric"
+            placeholder="Número de pedido, ej. 154"
+            className="w-full border border-[#128C7E]/40 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#128C7E]/30"
+          />
+          <button type="submit" className="w-full bg-[#128C7E] hover:bg-[#0e6b5e] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Continuar</button>
+        </form>
       );
     }
 
