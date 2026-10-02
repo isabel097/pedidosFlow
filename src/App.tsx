@@ -16,8 +16,8 @@ type WaPhase =
   | 'np-camisa-qty' | 'np-camisa-color' | 'np-camisa-talla' | 'np-camisa-date' | 'np-camisa-confirm'
   | 'np-floral-flowers' | 'np-floral-size' | 'np-floral-date' | 'np-floral-confirm'
   | 'order-done'
-  | 'mod-name' | 'mod-what' | 'mod-value' | 'mod-date' | 'mod-done'
-  | 'consult-name' | 'consult-show'
+  | 'mod-order' | 'mod-name' | 'mod-what' | 'mod-value' | 'mod-date' | 'mod-done'
+  | 'consult-order' | 'consult-name' | 'consult-show'
   | 'my-orders';
 
 interface WaMsg {
@@ -70,6 +70,15 @@ interface ChangeRequest {
   timestamp: string;
 }
 
+interface QuantityDecision {
+  orderId: string;
+  previousValue: number;
+  newValue: number;
+  result: 'approved' | 'rejected';
+  reason: string;
+  timestamp: string;
+}
+
 // ─── Production stages ────────────────────────────────────────────────────────
 const STAGES = [
   'Materiales preparados',
@@ -86,7 +95,7 @@ const STAGES = [
 
 const INITIAL_CHECKLIST: Record<string, boolean[]> = {
   '#154': [false, false, false, false, false, false, false],
-  '#155': [true, true, true, false, false, false, false],
+  '#155': [true, true, true, true, true, true, true],
   '#153': [true, true, false, false, false, false, false],
   '#152': [false, false, false, false, false, false, false],
 };
@@ -99,7 +108,7 @@ const INITIAL_NOTIFS: Notif[] = [
 
 const STATIC_ORDERS: BotOrder[] = [
   { id: '#154', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '30/08 – 16:00', status: 'Confirmado' },
-  { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '01/09 – 12:00', status: 'En producción' },
+  { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', qty: '20 personas', delivery: '01/09 – 12:00', status: 'Control final' },
   { id: '#156', client: 'María Torres', product: 'Torta personalizada', qty: '35 personas', delivery: '02/09 – 15:00', status: 'Pendiente de revisión' },
   { id: '#153', client: 'Daniel Ruiz', product: '20 camisetas', qty: '20 unidades', delivery: '30/08 – 18:00', status: 'En producción' },
   { id: '#152', client: 'Camila Pérez', product: 'Arreglo floral', qty: '1 arreglo', delivery: '31/08 – 10:00', status: 'Confirmado' },
@@ -161,6 +170,32 @@ function guardarCantidad(pedidoId: string, cantidad: number): void {
   }
 }
 
+const QUANTITY_DECISION_KEY = 'pedidosflow_quantity_decisions_v1';
+const CHECKLIST_KEY = 'pedidosflow_checklist_v1';
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson<T>(key: string, value: T): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function normalizeOrderId(value: string): string {
+  const digits = value.replace(/[^0-9]/g, '');
+  return digits ? `#${digits}` : value.trim();
+}
+
+function parseQuantity(value: string): number {
+  const n = Number(value.replace(/[^0-9]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ─── Helper components ────────────────────────────────────────────────────────
 
 function Dot({ type }: { type: 'success' | 'danger' | 'warning' | 'info' }) {
@@ -182,6 +217,7 @@ function Badge({ type, children }: { type: 'success' | 'danger' | 'warning' | 'i
 function StatusBadge({ status }: { status: string }) {
   if (status === 'Confirmado') return <Badge type="info">Confirmado</Badge>;
   if (status === 'En producción') return <Badge type="warning">En producción</Badge>;
+  if (status === 'Control final') return <Badge type="danger">Control final</Badge>;
   if (status === 'Entregado') return <Badge type="success">Entregado</Badge>;
   if (status === 'Pendiente de revisión') return <Badge type="neutral">Pendiente de revisión</Badge>;
   return <Badge type="neutral">{status}</Badge>;
@@ -203,7 +239,7 @@ function RuleRow({ label, value, pass }: { label: string; value: string; pass: b
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-function DashboardView({ onSelectOrder, order154Qty, change154State, change155State, photoState, onAcceptPhoto, onRejectPhoto, dynamicOrders }: {
+function DashboardView({ onSelectOrder, order154Qty, change154State, change155State, photoState, onAcceptPhoto, onRejectPhoto, dynamicOrders, pendingChangesCount }: {
   onSelectOrder: (id: string) => void;
   order154Qty: number;
   change154State: Change154State;
@@ -212,6 +248,7 @@ function DashboardView({ onSelectOrder, order154Qty, change154State, change155St
   onAcceptPhoto: () => void;
   onRejectPhoto: () => void;
   dynamicOrders: BotOrder[];
+  pendingChangesCount: number;
 }) {
   const staticOrders = STATIC_ORDERS.map(o =>
     o.id === '#154' ? { ...o, qty: `${order154Qty} personas` }
@@ -228,7 +265,7 @@ function DashboardView({ onSelectOrder, order154Qty, change154State, change155St
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Pedidos activos', value: String(activeCount), border: 'border-slate-200', bg: 'bg-slate-50', text: 'text-slate-700' },
-          { label: 'Cambios pendientes', value: change155State === 'rejected' ? '1' : '0', border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' },
+          { label: 'Cambios pendientes', value: String(pendingChangesCount), border: 'border-amber-100', bg: 'bg-amber-50', text: 'text-amber-700' },
           { label: 'En producción', value: String(inProdCount), border: 'border-blue-100', bg: 'bg-blue-50', text: 'text-blue-700' },
           { label: 'Revisiones pendientes', value: photoState === 'pending-review' ? '1' : '0', border: 'border-violet-100', bg: 'bg-violet-50', text: 'text-violet-700' },
         ].map(s => (
@@ -389,33 +426,28 @@ function PhotoReviewCard({ onAccept, onReject, order }: { onAccept: () => void; 
 
 // ─── Order detail ─────────────────────────────────────────────────────────────
 
-function OrderDetailView({ orderId, order154Qty, change154State, change155State, checklist, onApproveChange, onClose, onGoChanges, dynamicOrders }: {
+function OrderDetailView({ orderId, order154Qty, change154State, change155State, checklist, quantityDecisions, pendingQty, onApproveChange, onClose, onGoChanges, dynamicOrders }: {
   orderId: string;
   order154Qty: number;
   change154State: Change154State;
   change155State: Change155State;
   checklist: Record<string, boolean[]>;
+  quantityDecisions: QuantityDecision[];
+  pendingQty: number | null;
   onApproveChange: () => void;
   onClose: () => void;
   onGoChanges: () => void;
   dynamicOrders: BotOrder[];
 }) {
-  const is154 = orderId === '#154';
-  const is155 = orderId === '#155';
   const stagesFor = checklist[orderId] || STAGES.map(() => false);
   const doneCount = stagesFor.filter(Boolean).length;
-
-  // For dynamic bot orders, find their data
-  const allKnown = [...dynamicOrders, ...STATIC_ORDERS];
-  const knownOrder = allKnown.find(o => o.id === orderId);
-  const isStaticKnown = ['#154', '#155', '#156', '#153', '#152'].includes(orderId);
-  const isDynamic = !isStaticKnown && !!knownOrder;
-
-  const displayClient = isDynamic ? (knownOrder?.client ?? '—') : 'Laura Gómez';
-  const displayProduct = isDynamic ? (knownOrder?.product ?? '—') : (is154 ? 'Torta personalizada' : 'Torta personalizada');
-  const displayQty = isDynamic ? (knownOrder?.qty ?? '—') : (is154 ? `${order154Qty} personas` : '20 personas');
-  const displayDelivery = isDynamic ? (knownOrder?.delivery ?? '—') : (is154 ? '30/08/2025 – 16:00' : '01/09/2025 – 12:00');
-  const displayStatus = isDynamic ? (knownOrder?.status ?? 'Confirmado') : (is155 ? 'En producción' : 'Confirmado');
+  const lastDecision = quantityDecisions.filter(d => d.orderId === orderId).slice(-1)[0];
+  const knownOrder = [...dynamicOrders, ...STATIC_ORDERS].find(o => o.id === orderId);
+  const displayClient = knownOrder?.client ?? '—';
+  const displayProduct = knownOrder?.product ?? 'Torta personalizada';
+  const displayQty = orderId === '#154' ? `${order154Qty} personas` : (knownOrder?.qty ?? '—');
+  const displayDelivery = knownOrder?.delivery ?? '—';
+  const displayStatus = knownOrder?.status ?? 'Confirmado';
 
   return (
     <div className="space-y-5 animate-slide-in">
@@ -424,9 +456,8 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
         <span className="text-slate-200">|</span>
         <h1 className="font-display font-bold text-xl text-slate-800">Pedido {orderId}</h1>
         <StatusBadge status={displayStatus} />
-        {change154State === 'approved' && is154 && <Badge type="success">Cambio aprobado</Badge>}
-        {change155State === 'manually-approved' && is155 && <Badge type="warning">Aprobado manualmente</Badge>}
-        {change155State === 'maintained' && is155 && <Badge type="danger">Rechazo mantenido</Badge>}
+        {lastDecision?.result === 'approved' && <Badge type="success">Cambio aprobado</Badge>}
+        {lastDecision?.result === 'rejected' && <Badge type="danger">Cambio rechazado</Badge>}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -438,7 +469,6 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
                 { label: 'Cliente', value: displayClient },
                 { label: 'Producto', value: displayProduct },
                 { label: 'Cantidad', value: displayQty },
-                ...(isDynamic ? [] : [{ label: 'Color', value: is154 ? 'Azul' : 'Rosado' }]),
                 { label: 'Fecha de entrega', value: displayDelivery },
                 { label: 'Producción', value: `${doneCount} / ${STAGES.length} etapas completadas` },
               ].map(f => (
@@ -450,28 +480,24 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
             </dl>
           </div>
 
-          {is154 && change154State === 'validating' && (
-            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} />
+          {orderId === '#154' && change154State === 'validating' && (
+            <ValidationPanel154 onApprove={onApproveChange} checklist={checklist['#154'] || []} pendingQty={pendingQty ?? 25} />
           )}
-          {is154 && change154State === 'approved' && (
+
+          {orderId === '#154' && change154State === 'approved' && lastDecision?.result === 'approved' && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Dot type="success" />
-                <span className="font-display font-semibold text-emerald-800">Cambio aprobado automáticamente</span>
-              </div>
-              <p className="text-emerald-700 text-sm">Cantidad actualizada de <strong>20 → 25 personas</strong>. El pedido continúa con normalidad.</p>
+              <div className="flex items-center gap-2 mb-2"><Dot type="success" /><span className="font-display font-semibold text-emerald-800">Cambio aprobado automáticamente</span></div>
+              <p className="text-emerald-700 text-sm">Cantidad actualizada de <strong>{lastDecision.previousValue} → {lastDecision.newValue} personas</strong>. El cambio quedó registrado en el historial.</p>
             </div>
           )}
-          {is155 && change155State === 'rejected' && (
-            <RejectionPanel155 checklist={checklist['#155'] || []} onGoChanges={onGoChanges} />
-          )}
-          {is155 && (change155State === 'manually-approved' || change155State === 'maintained') && (
-            <DecisionHistoryPanel state={change155State} />
+
+          {orderId === '#155' && lastDecision?.result === 'rejected' && (
+            <RejectionPanel155 checklist={stagesFor} decision={lastDecision} onGoChanges={onGoChanges} />
           )}
         </div>
 
         <div>
-          <VersionHistory orderId={orderId} order154Qty={order154Qty} change154State={change154State} change155State={change155State} />
+          <VersionHistory orderId={orderId} order154Qty={order154Qty} quantityDecisions={quantityDecisions} />
         </div>
       </div>
     </div>
@@ -480,7 +506,7 @@ function OrderDetailView({ orderId, order154Qty, change154State, change155State,
 
 // ─── Validation panels ────────────────────────────────────────────────────────
 
-function ValidationPanel154({ onApprove, checklist }: { onApprove: () => void; checklist: boolean[] }) {
+function ValidationPanel154({ onApprove, checklist, pendingQty }: { onApprove: () => void; checklist: boolean[]; pendingQty: number }) {
   const doneCount = checklist.filter(Boolean).length;
   const currentStage = doneCount === 0 ? 'No iniciada' : STAGES[doneCount - 1];
   const stageOk = doneCount <= 1;
@@ -490,7 +516,7 @@ function ValidationPanel154({ onApprove, checklist }: { onApprove: () => void; c
       <div className="flex items-center gap-2 mb-1">
         <h3 className="font-display font-semibold text-slate-800">Motor de Validación</h3>
       </div>
-      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cantidad 20 → 25 personas · Pedido #154</p>
+      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cantidad 20 → {pendingQty} personas · Pedido #154</p>
       <div className="space-y-2 mb-4">
         <RuleRow label="Producción iniciada" value={doneCount > 0 ? 'SI' : 'NO'} pass={doneCount === 0} />
         <RuleRow label={`Etapa actual: ${currentStage} (${doneCount}/${STAGES.length})`} value={stageOk ? 'VIABLE' : 'BLOQUEADO'} pass={stageOk} />
@@ -513,25 +539,25 @@ function ValidationPanel154({ onApprove, checklist }: { onApprove: () => void; c
   );
 }
 
-function RejectionPanel155({ checklist, onGoChanges }: { checklist: boolean[]; onGoChanges: () => void }) {
+function RejectionPanel155({ checklist, decision, onGoChanges }: { checklist: boolean[]; decision: QuantityDecision; onGoChanges: () => void }) {
   const doneCount = checklist.filter(Boolean).length;
-  const currentStage = doneCount > 0 ? STAGES[doneCount - 1] : 'No iniciada';
+  const currentStage = derivarEtapa(checklist);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 animate-slide-in">
+    <div className="bg-white border border-red-200 rounded-xl p-5 animate-slide-in">
       <h3 className="font-display font-semibold text-slate-800 mb-1">Motor de Validación</h3>
-      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cambio completo de diseño · Pedido #155</p>
+      <p className="text-xs text-slate-500 mb-4">Cambio solicitado: Cantidad {decision.previousValue} → {decision.newValue} personas · Pedido #155</p>
       <div className="space-y-2 mb-4">
         <RuleRow label="Producción iniciada" value="SI" pass={false} />
         <RuleRow label={`Etapa actual: ${currentStage} (${doneCount}/${STAGES.length})`} value="BLOQUEADO" pass={false} />
-        <RuleRow label="Cambio de diseño permitido en este estado" value="NO" pass={false} />
+        <RuleRow label="Cambio de cantidad permitido" value="NO" pass={false} />
       </div>
-      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center gap-2">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
         <Dot type="danger" />
-        <span className="text-red-700 font-semibold text-sm">CAMBIO NO VIABLE – El pedido ya está en producción</span>
+        <span className="text-red-700 font-semibold text-sm">{decision.reason}</span>
       </div>
       <button onClick={onGoChanges} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm border border-slate-200 transition-colors">
-        Ver alerta de revisión →
+        Ver historial de la decisión →
       </button>
     </div>
   );
@@ -560,19 +586,22 @@ function DecisionHistoryPanel({ state }: { state: Change155State }) {
 
 // ─── Version history ──────────────────────────────────────────────────────────
 
-function VersionHistory({ orderId, order154Qty, change154State, change155State }: {
-  orderId: string; order154Qty: number; change154State: Change154State; change155State: Change155State;
+function VersionHistory({ orderId, order154Qty, quantityDecisions }: {
+  orderId: string;
+  order154Qty: number;
+  quantityDecisions: QuantityDecision[];
 }) {
-  const is154 = orderId === '#154';
-
-  type Entry = { date: string; time: string; label: string; detail: string; color: string };
-  const entries: Entry[] = [
-    { date: '27/08', time: '09:15', label: 'Versión 1', detail: is154 ? '20 personas · Color azul · Entrega 30/08' : '20 personas · Color rosado · Entrega 01/09', color: 'bg-blue-400 text-blue-600' },
-    ...(is154 && change154State !== null ? [{ date: '29/08', time: '11:20', label: 'Cambio solicitado', detail: '20 → 25 personas', color: 'bg-amber-400 text-amber-600' }] : []),
-    ...(is154 && change154State === 'approved' ? [{ date: '29/08', time: '11:21', label: 'Versión 2', detail: `${order154Qty} personas · Color azul · Entrega 30/08`, color: 'bg-emerald-500 text-emerald-600' }] : []),
-    ...(!is154 && change155State !== null ? [{ date: '29/08', time: '14:33', label: 'Cambio rechazado', detail: 'Cambio de diseño – Rechazo automático', color: 'bg-red-400 text-red-600' }] : []),
-    ...(!is154 && change155State === 'manually-approved' ? [{ date: '29/08', time: '15:04', label: 'Aprobado manualmente', detail: 'Responsable: Administrador', color: 'bg-amber-400 text-amber-600' }] : []),
-    ...(!is154 && change155State === 'maintained' ? [{ date: '29/08', time: '15:04', label: 'Rechazo confirmado', detail: 'Responsable: Administrador', color: 'bg-slate-400 text-slate-500' }] : []),
+  const knownOrder = STATIC_ORDERS.find(o => o.id === orderId);
+  const decisions = quantityDecisions.filter(d => d.orderId === orderId);
+  const initialQty = orderId === '#154' ? 20 : parseQuantity(knownOrder?.qty ?? '0');
+  const entries = [
+    { label: 'Versión inicial', detail: `${initialQty} personas · ${knownOrder?.product ?? 'Torta personalizada'} · Entrega ${knownOrder?.delivery ?? '—'}`, color: 'bg-blue-400 text-blue-600', timestamp: '' },
+    ...decisions.map(d => ({
+      label: d.result === 'approved' ? 'Cambio aprobado' : 'Cambio rechazado',
+      detail: `${d.previousValue} → ${d.newValue} personas · ${d.reason}`,
+      color: d.result === 'approved' ? 'bg-emerald-500 text-emerald-600' : 'bg-red-400 text-red-600',
+      timestamp: new Date(d.timestamp).toLocaleString('es-CO'),
+    })),
   ];
 
   return (
@@ -581,10 +610,10 @@ function VersionHistory({ orderId, order154Qty, change154State, change155State }
       <div className="relative pl-4">
         <div className="absolute left-1.5 top-2 bottom-2 w-px bg-slate-100" />
         {entries.map((e, i) => (
-          <div key={i} className="relative mb-5 last:mb-0">
+          <div key={`${orderId}-version-${i}`} className="relative mb-5 last:mb-0">
             <div className={`absolute -left-2.5 top-1 w-3 h-3 rounded-full border-2 border-white ${e.color.split(' ')[0]}`} />
             <div className={`text-xs font-semibold mb-0.5 ${e.color.split(' ')[1]}`}>{e.label}</div>
-            <div className="text-xs text-slate-400 font-mono-data mb-1">{e.date} – {e.time}</div>
+            <div className="text-xs text-slate-400 font-mono-data mb-1">{e.timestamp || 'Inicial'}</div>
             <div className="bg-slate-50 rounded-lg p-2 text-xs text-slate-600 border border-slate-100">{e.detail}</div>
           </div>
         ))}
@@ -620,7 +649,7 @@ function CambiosPendientesView({ change155State, photoState, changeRequests, pen
         <PhotoReviewCard onAccept={onAcceptPhoto} onReject={onRejectPhoto} />
       )}
 
-      {!resolved && change155State === 'rejected' && (
+      {false && !resolved && change155State === 'rejected' && (
         <div className="bg-white border border-red-200 rounded-xl overflow-hidden">
           <div className="bg-red-50 px-5 py-3 border-b border-red-100 flex items-center gap-2">
             <Dot type="danger" />
@@ -752,49 +781,49 @@ function CambiosPendientesView({ change155State, photoState, changeRequests, pen
 
 // ─── Historial ────────────────────────────────────────────────────────────────
 
-function HistorialView({ order154Qty, change154State, change155State }: {
-  order154Qty: number; change154State: Change154State; change155State: Change155State;
+function HistorialView({ order154Qty, change154State, change155State, quantityDecisions }: {
+  order154Qty: number;
+  change154State: Change154State;
+  change155State: Change155State;
+  quantityDecisions: QuantityDecision[];
 }) {
-  type Entry = { date: string; time: string; label: string; detail: string; dot: string };
-  const entries154: Entry[] = [
-    { date: '27/08', time: '09:15', label: 'Versión 1', detail: '20 personas · Color azul · Entrega 30/08', dot: 'bg-blue-400 text-blue-600' },
-    ...(change154State !== null ? [{ date: '29/08', time: '11:20', label: 'Cambio solicitado', detail: '20 → 25 personas', dot: 'bg-amber-400 text-amber-600' }] : []),
-    ...(change154State === 'approved' ? [{ date: '29/08', time: '11:21', label: 'Versión 2', detail: `${order154Qty} personas · Color azul · Entrega 30/08`, dot: 'bg-emerald-500 text-emerald-600' }] : []),
-  ];
-  const entries155: Entry[] = [
-    { date: '27/08', time: '10:30', label: 'Versión 1', detail: '20 personas · Color rosado · Entrega 01/09', dot: 'bg-blue-400 text-blue-600' },
-    ...(change155State !== null ? [{ date: '29/08', time: '14:33', label: 'Cambio rechazado', detail: 'Cambio de diseño – Rechazo automático (producción iniciada)', dot: 'bg-red-400 text-red-600' }] : []),
-    ...(change155State === 'manually-approved' ? [{ date: '29/08', time: '15:04', label: 'Aprobado manualmente', detail: 'Decisión: rechazado → aprobado · Resp: Administrador', dot: 'bg-amber-400 text-amber-600' }] : []),
-    ...(change155State === 'maintained' ? [{ date: '29/08', time: '15:04', label: 'Rechazo confirmado', detail: 'Decisión: rechazado · Resp: Administrador', dot: 'bg-slate-400 text-slate-500' }] : []),
-  ];
+  const entries154 = quantityDecisions.filter(d => d.orderId === '#154');
+  const entries155 = quantityDecisions.filter(d => d.orderId === '#155');
 
-  const renderTimeline = (entries: Entry[]) => (
-    <div className="relative pl-4 pt-1">
+  const renderTimeline = (entries: QuantityDecision[], fallbackDetail: string) => {
+    const items = entries.length > 0 ? entries.map(d => ({
+      label: d.result === 'approved' ? 'Cambio aprobado' : 'Cambio rechazado',
+      detail: `${d.previousValue} → ${d.newValue} personas · ${d.reason}`,
+      timestamp: d.timestamp,
+      dot: d.result === 'approved' ? 'bg-emerald-500 text-emerald-600' : 'bg-red-500 text-red-600',
+    })) : [{
+      label: 'Versión inicial',
+      detail: fallbackDetail,
+      timestamp: '',
+      dot: 'bg-blue-400 text-blue-600',
+    }];
+
+    return <div className="relative pl-4 pt-1">
       <div className="absolute left-1.5 top-2 bottom-2 w-px bg-slate-100" />
-      {entries.map((e, i) => (
+      {items.map((e, i) => (
         <div key={i} className="relative mb-4 last:mb-0 flex gap-4">
           <div className="w-24 flex-shrink-0 text-right pt-0.5">
-            <div className="text-xs font-mono-data text-slate-500">{e.date}</div>
-            <div className="text-xs font-mono-data text-slate-400">{e.time}</div>
+            <div className="text-xs font-mono-data text-slate-500">{e.timestamp ? new Date(e.timestamp).toLocaleDateString('es-CO') : 'Inicial'}</div>
+            <div className="text-xs font-mono-data text-slate-400">{e.timestamp ? new Date(e.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
           </div>
-          <div className="flex flex-col items-center flex-shrink-0 z-10">
-            <div className={`w-3 h-3 rounded-full mt-1 border-2 border-white ${e.dot.split(' ')[0]}`} />
-          </div>
-          <div className="flex-1 pb-4">
-            <div className={`text-xs font-semibold mb-0.5 ${e.dot.split(' ')[1]}`}>{e.label}</div>
-            <div className="text-sm text-slate-600">{e.detail}</div>
-          </div>
+          <div className="flex flex-col items-center flex-shrink-0 z-10"><div className={`w-3 h-3 rounded-full mt-1 border-2 border-white ${e.dot.split(' ')[0]}`} /></div>
+          <div className="flex-1 pb-4"><div className={`text-xs font-semibold mb-0.5 ${e.dot.split(' ')[1]}`}>{e.label}</div><div className="text-sm text-slate-600">{e.detail}</div></div>
         </div>
       ))}
-    </div>
-  );
+    </div>;
+  };
 
   return (
     <div className="space-y-5">
       <h1 className="font-display font-bold text-xl text-slate-800">Historial de pedidos</h1>
       {[
-        { id: '#154', client: 'Laura Gómez', product: 'Torta personalizada', status: 'Confirmado', entries: entries154 },
-        { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', status: 'En producción', entries: entries155 },
+        { id: '#154', client: 'Laura Gómez', product: 'Torta personalizada', status: 'Confirmado', entries: entries154, fallback: `${order154Qty} personas · Color azul · Entrega 30/08` },
+        { id: '#155', client: 'Laura Gómez', product: 'Torta personalizada', status: 'Control final', entries: entries155, fallback: '20 personas · Color rosado · Entrega 01/09' },
       ].map(o => (
         <div key={o.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 flex-wrap">
@@ -802,7 +831,7 @@ function HistorialView({ order154Qty, change154State, change155State }: {
             <span className="text-slate-700 font-medium text-sm">{o.product} – {o.client}</span>
             <StatusBadge status={o.status} />
           </div>
-          <div className="p-5">{renderTimeline(o.entries)}</div>
+          <div className="p-5">{renderTimeline(o.entries, o.fallback)}</div>
         </div>
       ))}
     </div>
@@ -974,6 +1003,7 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
   const [draft, setDraft] = useState<OrderDraft>({});
   const [showCal, setShowCal] = useState(false);
   const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [textInput, setTextInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const now = () => {
@@ -996,6 +1026,7 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
 
   const goMenu = () => {
     setDraft({});
+    setTextInput('');
     setShowCal(false);
     setPickedDate(null);
     addBot('De acuerdo. ¿En qué puedo ayudarte?');
@@ -1005,7 +1036,10 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
   const DATE_PHASES: WaPhase[] = ['np-torta-date', 'np-camisa-date', 'np-floral-date', 'mod-date'];
 
   const handle = (choice: string) => {
-    addUser(choice);
+    const value = choice.trim();
+    if (!value) return;
+    addUser(value);
+    setTextInput('');
 
     switch (phase) {
       // ── Menú principal ──────────────────────────────────────────
@@ -1014,11 +1048,11 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
           addBot('Para comenzar, ¿cuál es tu nombre y apellido?');
           setPhase('np-name');
         } else if (choice === 'Modificar pedido') {
-          addBot('Para verificar tu identidad, indica tu nombre y apellido completo.');
-          setPhase('mod-name');
+          addBot('Indica el número del pedido que deseas modificar. Puedes escribir 154 o #154.');
+          setPhase('mod-order');
         } else if (choice === 'Consultar pedido') {
-          addBot('Indica tu nombre y apellido para consultar tu pedido.');
-          setPhase('consult-name');
+          addBot('Indica el número del pedido que deseas consultar. Puedes escribir 154 o #154.');
+          setPhase('consult-order');
         } else if (choice === 'Mis pedidos') {
           const allList = allOrders.map(o => `— ${o.id} · ${o.product} · ${o.delivery} · ${o.status}`).join('\n');
           addBot(`Pedidos registrados en el sistema:\n\n${allList}`);
@@ -1227,6 +1261,20 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
         break;
 
       // ── Modificar pedido ─────────────────────────────────────────
+      case 'mod-order': {
+        const orderId = normalizeOrderId(choice);
+        const order = allOrders.find(o => o.id === orderId);
+        if (!order) {
+          addBot(`No encontramos el pedido ${orderId}. Verifica el número e intenta de nuevo.`);
+          setPhase('mod-order');
+          break;
+        }
+        setDraft(prev => ({ ...prev, modOrderId: order.id, modClient: order.client }));
+        addBot(`Pedido encontrado:\n\n${order.id} · ${order.product}\nCliente: ${order.client}\nCantidad actual: ${order.qty}\nEntrega: ${order.delivery}\nEstado: ${order.status}\n\n¿Qué deseas modificar?`);
+        setPhase('mod-what');
+        break;
+      }
+
       case 'mod-name': {
         const clientOrders = allOrders.filter(o => o.client.toLowerCase() === choice.toLowerCase());
         if (clientOrders.length === 0) {
@@ -1280,28 +1328,48 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
 
       case 'mod-value': {
         const ordId = draft.modOrderId || '#154';
+        const currentOrder = allOrders.find(o => o.id === ordId);
         onNotify({ text: 'Cliente solicitó una modificación', sub: `Pedido ${ordId} – ${draft.modField} → ${choice}`, type: 'warning' });
-        if (draft.modField === 'Cantidad' && ordId === '#154') {
+
+        if (draft.modField === 'Cantidad') {
           const cantidadNueva = parseInt(choice, 10);
           const evaluacion = onRequestQuantityChange(ordId, cantidadNueva);
-          if (evaluacion.resultado === 'aplicado') {
-            addBot(`Solicitud de cambio registrada.\n\nPedido ${ordId}\nModificación: Cantidad → ${choice}\n\n${evaluacion.motivo}`, { label: '→ Ver motor de validación', action: ordId === '#154' ? 'go-validation-154' : 'go-cambios' });
+          if (evaluacion.resultado === 'aplicado' || evaluacion.resultado === 'rechazado') {
+            addBot(`Solicitud de cambio procesada.\n\nPedido ${ordId}\nModificación: Cantidad → ${choice}\n\n${evaluacion.motivo}`, {
+              label: '→ Ver decisión',
+              action: `go-validation-${ordId}`,
+            });
+          } else if (evaluacion.resultado === 'pendiente-revision') {
+            onChangeRequested({ orderId: ordId, client: draft.modClient || currentOrder?.client || '', field: 'Cantidad', newValue: choice });
+            addBot(`Solicitud registrada para revisión.\n\nPedido ${ordId}\nModificación: Cantidad → ${choice}\n\n${evaluacion.motivo}`, {
+              label: '→ Ver cambios pendientes',
+              action: 'go-cambios',
+            });
           } else {
-            addBot(`Solicitud de cambio registrada.\n\nPedido ${ordId}\nModificación: Cantidad → ${choice}\n\n${evaluacion.motivo}`);
-            if (evaluacion.resultado === 'pendiente-revision') {
-              onChangeRequested({ orderId: ordId, client: draft.modClient || '', field: 'Cantidad', newValue: choice });
-            }
+            addBot(`No fue posible procesar el cambio.\n\n${evaluacion.motivo}`);
           }
         } else {
-          onChangeRequested({ orderId: ordId, client: draft.modClient || '', field: draft.modField || 'Campo', newValue: choice });
-          const navAction = ordId === '#154' ? 'go-validation-154' : ordId === '#155' ? 'go-validation-155' : 'go-cambios';
-          addBot(`Solicitud de cambio registrada.\n\nPedido ${ordId}\nModificación: ${draft.modField} → ${choice}\n\nVerificando factibilidad del cambio...`, { label: '→ Ver motor de validación', action: navAction });
+          onChangeRequested({ orderId: ordId, client: draft.modClient || currentOrder?.client || '', field: draft.modField || 'Campo', newValue: choice });
+          addBot(`Solicitud registrada.\n\nPedido ${ordId}\nModificación: ${draft.modField} → ${choice}`, { label: '→ Ver cambios pendientes', action: 'go-cambios' });
         }
         setPhase('mod-done');
         break;
       }
 
       // ── Consultar pedido ─────────────────────────────────────────
+      case 'consult-order': {
+        const orderId = normalizeOrderId(choice);
+        const found = allOrders.find(o => o.id === orderId);
+        if (!found) {
+          addBot(`No encontramos el pedido ${orderId}. Verifica el número e intenta de nuevo.`);
+          setPhase('consult-order');
+          break;
+        }
+        addBot(`Pedido ${found.id}\nProducto: ${found.product}\nCantidad: ${found.qty}\nEntrega: ${found.delivery}\nEstado: ${found.status}`);
+        setPhase('consult-show');
+        break;
+      }
+
       case 'consult-name': {
         const found = allOrders.filter(o => o.client.toLowerCase() === choice.toLowerCase());
         if (found.length === 0) {
@@ -1380,6 +1448,22 @@ function WhatsAppView({ onNavigate, onOrderCreated, onNotify, allOrders, onChang
         >
           Adjuntar foto de referencia
         </button>
+      );
+    }
+
+    if (phase === 'mod-order' || phase === 'consult-order') {
+      return (
+        <form className="space-y-2" onSubmit={e => { e.preventDefault(); handle(textInput); }}>
+          <input
+            value={textInput}
+            onChange={e => setTextInput(e.target.value)}
+            autoFocus
+            inputMode="numeric"
+            placeholder="Número de pedido, ej. 154"
+            className="w-full border border-[#128C7E]/40 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#128C7E]/30"
+          />
+          <button type="submit" className="w-full bg-[#128C7E] hover:bg-[#0e6b5e] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">Continuar</button>
+        </form>
       );
     }
 
@@ -1835,22 +1919,34 @@ function NotificationsPanel({ notifs, onClose, onMarkRead }: {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const persistedDecisions = readJson<QuantityDecision[]>(QUANTITY_DECISION_KEY, []);
   const [mode, setMode] = useState<Mode>('platform');
   const [nav, setNav] = useState<Nav>('pedidos');
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
-  const [change154State, setChange154State] = useState<Change154State>(null);
-  const [change155State, setChange155State] = useState<Change155State>(null);
+  const [change154State, setChange154State] = useState<Change154State>(persistedDecisions.some(d => d.orderId === '#154' && d.result === 'approved') ? 'approved' : null);
+  const [change155State, setChange155State] = useState<Change155State>(persistedDecisions.some(d => d.orderId === '#155' && d.result === 'rejected') ? 'rejected' : null);
   const [order154Qty, setOrder154Qty] = useState(() => leerCantidadGuardada('#154', 20));
   const [pendingQty154, setPendingQty154] = useState<number | null>(null);
   const [photoState, setPhotoState] = useState<PhotoState>(null);
-  const [checklist, setChecklist] = useState<Record<string, boolean[]>>(INITIAL_CHECKLIST);
+  const [checklist, setChecklist] = useState<Record<string, boolean[]>>(() => readJson<Record<string, boolean[]>>(CHECKLIST_KEY, INITIAL_CHECKLIST));
   const [notifs, setNotifs] = useState<Notif[]>(INITIAL_NOTIFS);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [dynamicOrders, setDynamicOrders] = useState<BotOrder[]>([]);
+  const [dynamicOrders, setDynamicOrders] = useState<BotOrder[]>(() => readJson<BotOrder[]>('pedidosflow_dynamic_orders_v1', []));
   const nextOrderIdRef = useRef(157);
   const [validationRules, setValidationRules] = useState<RuleMatrix>(DEFAULT_RULES);
-  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>(() => readJson<ChangeRequest[]>('pedidosflow_change_requests_v1', []));
   const [pendingPhotoOrder, setPendingPhotoOrder] = useState<BotOrder | null>(null);
+
+  const [quantityDecisions, setQuantityDecisions] = useState<QuantityDecision[]>(persistedDecisions);
+
+  useEffect(() => writeJson(QUANTITY_DECISION_KEY, quantityDecisions), [quantityDecisions]);
+  useEffect(() => writeJson(CHECKLIST_KEY, checklist), [checklist]);
+  useEffect(() => writeJson('pedidosflow_dynamic_orders_v1', dynamicOrders), [dynamicOrders]);
+  useEffect(() => writeJson('pedidosflow_change_requests_v1', changeRequests), [changeRequests]);
+  useEffect(() => {
+    const ids = [...STATIC_ORDERS, ...dynamicOrders].map(o => Number(o.id.replace(/[^0-9]/g, ''))).filter(Number.isFinite);
+    nextOrderIdRef.current = Math.max(156, ...ids) + 1;
+  }, [dynamicOrders]);
 
   const unread = notifs.filter(n => !n.read).length;
 
@@ -1896,7 +1992,6 @@ export default function App() {
     setChecklist(prev => {
       const stages = [...(prev[orderId] || STAGES.map(() => false))];
       stages[idx] = !stages[idx];
-      // If unchecking, uncheck all subsequent
       if (!stages[idx]) {
         for (let i = idx + 1; i < stages.length; i++) stages[i] = false;
       }
@@ -1905,23 +2000,53 @@ export default function App() {
   };
 
   const handleWaNavigate = (action: string) => {
-    if (action === 'go-orders') { setMode('platform'); setNav('pedidos'); setSelectedOrder(null); }
-    else if (action === 'go-validation-154') { setMode('platform'); setNav('pedidos'); setChange154State('validating'); setSelectedOrder('#154'); }
-    else if (action === 'go-validation-155') { setMode('platform'); setNav('pedidos'); setChange155State('rejected'); setSelectedOrder('#155'); }
-    else if (action === 'go-cambios') { setMode('platform'); setNav('cambios'); setSelectedOrder(null); }
-    else if (action === 'go-photo-review') { setMode('platform'); setNav('cambios'); }
+    if (action === 'go-orders') {
+      setMode('platform'); setNav('pedidos'); setSelectedOrder(null);
+    } else if (action.startsWith('go-validation-')) {
+      const orderId = normalizeOrderId(action.replace('go-validation-', ''));
+      setMode('platform'); setNav('pedidos'); setSelectedOrder(orderId);
+      const last = quantityDecisions.filter(d => d.orderId === orderId).slice(-1)[0];
+      if (orderId === '#154' && !last) setChange154State('validating');
+      if (orderId === '#155' && last?.result === 'rejected') setChange155State('rejected');
+    } else if (action === 'go-cambios') {
+      setMode('platform'); setNav('cambios'); setSelectedOrder(null);
+    } else if (action === 'go-photo-review') {
+      setMode('platform'); setNav('cambios');
+    }
   };
 
   const handleRequestQuantityChange = (pedidoId: string, cantidadNueva: unknown): EvaluacionCambioCantidad => {
-    const etapa = derivarEtapa(checklist[pedidoId]);
+    const orderId = normalizeOrderId(pedidoId);
+    const allOrdersNow = [...dynamicOrders, ...STATIC_ORDERS];
+    const order = allOrdersNow.find(o => o.id === orderId);
+    if (!order) return { resultado: 'invalido', motivo: `No se encontró el pedido ${orderId}.` };
+
+    const etapa = derivarEtapa(checklist[orderId]);
     const evaluacion = evaluarCambioCantidad(etapa, cantidadNueva);
-    if (pedidoId === '#154' && evaluacion.resultado === 'aplicado') {
-      const formato = validarFormatoCantidad(cantidadNueva);
-      if (formato.valido) {
-        setPendingQty154(formato.cantidad);
-        setChange154State('validating');
-      }
+    const formato = validarFormatoCantidad(cantidadNueva);
+    const previousQty = orderId === '#154' ? order154Qty : parseQuantity(order.qty);
+    if (!formato.valido) return evaluacion;
+
+    if (evaluacion.resultado === 'aplicado') {
+      setPendingQty154(formato.cantidad);
+      if (orderId === '#154') setChange154State('validating');
+      return evaluacion;
     }
+
+    if (evaluacion.resultado === 'rechazado' && orderId === '#155') {
+      const decision: QuantityDecision = {
+        orderId,
+        previousValue: previousQty,
+        newValue: formato.cantidad,
+        result: 'rejected',
+        reason: evaluacion.motivo,
+        timestamp: new Date().toISOString(),
+      };
+      setQuantityDecisions(prev => [...prev.filter(d => d.orderId !== orderId), decision]);
+      setChange155State('rejected');
+      addNotif({ text: 'Cambio rechazado automáticamente', sub: `Pedido ${orderId} – Cantidad: ${formato.cantidad} personas`, type: 'danger' });
+    }
+
     return evaluacion;
   };
 
@@ -1931,6 +2056,15 @@ export default function App() {
     setOrder154Qty(pendingQty154);
     guardarCantidad('#154', pendingQty154);
     setChange154State('approved');
+    const decision: QuantityDecision = {
+      orderId: '#154',
+      previousValue: cantidadAnterior,
+      newValue: pendingQty154,
+      result: 'approved',
+      reason: 'Cambio aprobado automáticamente: el pedido aún no ha iniciado producción.',
+      timestamp: new Date().toISOString(),
+    };
+    setQuantityDecisions(prev => [...prev.filter(d => d.orderId !== '#154'), decision]);
     addNotif({ text: 'Cambio aprobado automáticamente', sub: `Pedido #154 – Cantidad: ${cantidadAnterior} → ${pendingQty154} personas`, type: 'success' });
     setPendingQty154(null);
   };
@@ -1947,7 +2081,7 @@ export default function App() {
 
   const sidebarItems: { id: Nav; label: string; badge?: number }[] = [
     { id: 'pedidos', label: 'Pedidos', badge: dynamicOrders.length + 5 },
-    { id: 'cambios', label: 'Cambios pendientes', badge: (change155State === 'rejected' ? 1 : 0) + changeRequests.filter(r => r.status === 'pending').length },
+    { id: 'cambios', label: 'Cambios pendientes', badge: changeRequests.filter(r => r.status === 'pending').length },
     { id: 'produccion', label: 'Producción', badge: 2 },
     { id: 'clientes', label: 'Clientes' },
     { id: 'historial', label: 'Historial' },
@@ -1963,6 +2097,8 @@ export default function App() {
           change154State={change154State}
           change155State={change155State}
           checklist={checklist}
+          quantityDecisions={quantityDecisions}
+          pendingQty={pendingQty154}
           onApproveChange={handleApproveChange154}
           onClose={() => setSelectedOrder(null)}
           onGoChanges={() => { setSelectedOrder(null); setNav('cambios'); }}
@@ -1972,7 +2108,7 @@ export default function App() {
     }
     switch (nav) {
       case 'pedidos':
-        return <DashboardView onSelectOrder={setSelectedOrder} order154Qty={order154Qty} change154State={change154State} change155State={change155State} photoState={photoState} onAcceptPhoto={() => { setPhotoState('accepted'); addNotif({ text: 'Diseño personalizado confirmado', sub: 'Pedido #156 – Diseño viable', type: 'success' }); }} onRejectPhoto={() => { setPhotoState('rejected'); addNotif({ text: 'Diseño no viable', sub: 'Pedido #156 – Cancelado', type: 'danger' }); }} dynamicOrders={dynamicOrders} />;
+        return <DashboardView onSelectOrder={setSelectedOrder} order154Qty={order154Qty} change154State={change154State} change155State={change155State} photoState={photoState} onAcceptPhoto={() => { setPhotoState('accepted'); addNotif({ text: 'Diseño personalizado confirmado', sub: 'Pedido #156 – Diseño viable', type: 'success' }); }} onRejectPhoto={() => { setPhotoState('rejected'); addNotif({ text: 'Diseño no viable', sub: 'Pedido #156 – Cancelado', type: 'danger' }); }} dynamicOrders={dynamicOrders} pendingChangesCount={changeRequests.filter(r => r.status === 'pending').length} />;
       case 'cambios':
         return <CambiosPendientesView
           change155State={change155State}
@@ -2000,7 +2136,7 @@ export default function App() {
       case 'produccion':
         return <ProduccionView checklist={checklist} onToggle={toggleChecklist} />;
       case 'historial':
-        return <HistorialView order154Qty={order154Qty} change154State={change154State} change155State={change155State} />;
+        return <HistorialView order154Qty={order154Qty} change154State={change154State} change155State={change155State} quantityDecisions={quantityDecisions} />;
       case 'clientes':
         return (
           <div className="space-y-5">
@@ -2072,7 +2208,7 @@ export default function App() {
               onNavigate={handleWaNavigate}
               onOrderCreated={handleOrderCreated}
               onNotify={addNotif}
-              allOrders={[...dynamicOrders, ...STATIC_ORDERS]}
+              allOrders={[...dynamicOrders, ...STATIC_ORDERS.map(o => o.id === '#154' ? { ...o, qty: `${order154Qty} personas` } : o)]}
               onChangeRequested={handleChangeRequested}
               onPhotoReviewNeeded={handlePhotoReviewNeeded}
               onRequestQuantityChange={handleRequestQuantityChange}
