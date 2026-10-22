@@ -12,7 +12,7 @@ Este checklist cruza la guía docente con los artefactos preparados. “Preparad
 | 6. Incremento ejecutable | ZIP con servidor, interfaz, persistencia y cinco pedidos de demostración | La usuaria reporta que inicia con INICIAR_PEDIDOSFLOW.bat. La regresión debe ejecutarse desde la raíz funcional. |
 | 7. Trabajo colaborativo | Historial anterior, rama documental y PR #24, issues #25–#27 | Preparación documental hecha. Falta sincronizar el servidor a GitHub, revisión formal del PR de código y merge. La revisión local del compañero fue reportada por el equipo, pero no sustituye el registro formal en GitHub. |
 | 8. Pruebas y calidad | Casos, errores, aceptación, DoD y limitaciones | Salida real de npm run verify y recorrido E2E por adjuntar. El error “Missing script: verify” se originó al ejecutar desde la carpeta del prototipo o la carpeta exterior. |
-| APA 7 y fuente 11 | Word y PDF actualizados, referencias ampliadas, preguntas para validación primaria | Marcadores de Figuras 3–8 deben reemplazarse por capturas. La entrevista con negocio local sigue sin realizarse. |
+| APA 7 y fuente 11 | Word y PDF actualizados, referencias ampliadas, preguntas para validación primaria | Marcadores de Figuras 3–8 deben reemplazarse por capturas. La siguiente iteración profundizará el contraste operativo con una pastelería local. |
 | Repositorio | https://github.com/isabel097/pedidosFlow | main contiene el prototipo Vite/React; sincronizar el servidor del ZIP mediante issue #25 antes de afirmar que el repo reproduce la versión actual. |
 | Demostración 5 min | Guion en el informe | Preparado; ensayar y registrar la demostración real. |
 
