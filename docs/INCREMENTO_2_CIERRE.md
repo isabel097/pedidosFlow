@@ -38,7 +38,9 @@ El límite inicial de capacidad diaria es configurable. Debe validarse con el ne
 
 Requisitos: Node.js 20 o superior y npm.
 
-En Windows, desde la carpeta `PedidosFlow-incremento2`, ejecutar `INICIAR_PEDIDOSFLOW.bat`. Alternativamente:
+En Windows, ejecuta `INICIAR_PEDIDOSFLOW.bat` desde la carpeta donde están `src\index.ts` y el `package.json` del servidor. Si estás en la carpeta exterior donde se descomprimió `PedidosFlow-incremento2-documentacion-actualizada`, entra primero en el directorio interior `PedidosFlow-incremento2`. El `npm run` correcto debe indicar `pedidosflow@1.0.0`; si indica `figma-make-app@1.0.0` o falta el script `verify`, estás en la carpeta del prototipo visual y no en la raíz del servidor.
+
+Alternativamente, desde la raíz funcional:
 
 ```powershell
 npm ci
@@ -48,9 +50,15 @@ npm start
 
 La interfaz se abre en http://localhost:3001. No cerrar la terminal mientras se usa la aplicación.
 
+## Evidencia de la justificación
+
+El informe cita un estudio colombiano sobre diez emprendimientos, un estudio de entrevistas a doce micro y pequeñas empresas comerciales y un caso publicado de panadería para contextualizar necesidades reales de comunicación y organización de pedidos. Consultar `docs/JUSTIFICACION_EVIDENCIA_DOCUMENTAL.md`. Son fuentes secundarias: no sustituyen la validación de las reglas con una pastelería local. Esa validación está registrada en issue #27.
+
 ## Verificación
 
 La presencia de una función en el paquete no demuestra por sí sola que la regresión haya pasado. Para el cierre académico se debe conservar la salida real de `npm run verify`, los resultados del recorrido de navegador y las capturas referenciadas en `EVIDENCIAS_INCREMENTO_2.md`. No presentar resultados históricos del incremento anterior como si fueran ejecuciones de esta versión.
+
+Si `npm run verify` devuelve `Missing script: verify`, primero revisa la carpeta actual con `npm run`. El paquete funcional define `verify` como `npm run typecheck && npm test`; la verificación se debe ejecutar desde la raíz funcional junto a `src/index.ts`, no desde `prototipo-figma`.
 
 ## Limitaciones
 
@@ -59,7 +67,8 @@ La presencia de una función en el paquete no demuestra por sí sola que la regr
 - El almacenamiento es local en JSON y no está diseñado como base compartida para varias instancias desplegadas.
 - No incluye autenticación administrativa.
 - Las reglas de producción deben validarse con una persona encargada de un negocio real.
-- La publicación de los archivos ejecutables del servidor en este repositorio debe confirmarse antes de afirmar que la rama web permite reproducir el ZIP sin archivos adicionales.
+- La rama de GitHub contiene documentación de este incremento, pero el servidor funcional del ZIP todavía debe sincronizarse al repositorio. El issue #25 registra esa tarea.
+- La revisión informal local del compañero fue reportada por el equipo. La revisión formal del código debe registrarse en el pull request de implementación cuando el código esté publicado.
 
 ## Relación con el primer incremento
 
