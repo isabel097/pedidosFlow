@@ -1,100 +1,59 @@
-# pedidosFlow
+# PedidosFlow
 
-Sistema académico para la gestión de pedidos de tortas personalizadas.
+Proyecto académico del equipo **Gemas de Cristal** para gestionar pedidos de tortas personalizadas.
 
-## Descripción
+## Estado del repositorio y paquete ejecutable
 
-PedidosFlow permite consultar pedidos, solicitar cambios de cantidad y diseño, gestionar revisiones, hacer seguimiento de producción, consultar clientes, revisar el historial de cambios y configurar las reglas de negocio.
+Este repositorio contiene el prototipo inicial de Figma Make (React + Vite) y documentación histórica de los incrementos. El paquete ejecutable actualizado del segundo incremento utiliza un servidor Express + TypeScript y una interfaz web en `public/`; **no se debe asumir que esa implementación completa está publicada en esta rama hasta que sus archivos se sincronicen explícitamente**.
 
-El proyecto también incluye un flujo conversacional de prueba que simula la experiencia de atención por WhatsApp sin utilizar la API real de WhatsApp Business.
+## Alcance funcional descrito para el incremento 2
 
-## Alcance actual
+El paquete ejecutable de la entrega incluye:
 
-- Gestión de pedidos existentes.
-- Consulta de pedido.
-- Cambio de cantidad según la etapa de producción.
-- Cambio de diseño desde catálogo.
-- Solicitud de diseño personalizado con revisión manual.
-- Seguimiento de producción mediante checklist.
-- Consulta de clientes.
-- Historial de cambios.
-- Configuración de reglas y datos del negocio.
-- Flujo conversacional de prueba.
+- Consulta y modificación de pedidos según etapa de producción.
+- Solicitudes pendientes para revisión humana.
+- Persistencia de pedidos, cambios, notificaciones y configuración en JSON local.
+- Chat web simulado de WhatsApp con opciones rápidas y texto libre para intenciones conocidas.
+- Menú compacto separado del campo de escritura.
+- Aviso final en el chat después de que el encargado guarda la aprobación o el rechazo.
+- Precarga de cinco pedidos de demostración (#152–#156) cuando la carpeta de datos está nueva o vacía, sin duplicar ni reiniciar cambios en ejecuciones posteriores.
+- Reglas para enviar a revisión fechas pasadas, días con capacidad diaria alcanzada y diseños personalizados fuera del catálogo.
 
-## Pendientes principales
+La existencia de estas funciones en el ZIP no implica que las pruebas de la versión final hayan pasado. Consultar `docs/INCREMENTO_2_CIERRE.md` y `docs/EVIDENCIAS_INCREMENTO_2.md` para el alcance, los comandos y las evidencias que faltan adjuntar.
 
-- Registrar un pedido nuevo con persistencia real.
-- Integrar completamente la interfaz con la lógica y persistencia del programa.
-- Integrar dashboard y notificaciones con datos reales.
-- Completar pruebas y evidencia del primer incremento.
+## Cómo ejecutar el paquete funcional de la entrega
 
-## Fuera de alcance actual
+Requisitos: Node.js 20 o superior y npm. En Windows, descomprime el ZIP del incremento 2 y ejecuta `INICIAR_PEDIDOSFLOW.bat` desde la carpeta principal del proyecto. Alternativamente, desde la raíz del paquete ejecutable:
 
-- Integración real con WhatsApp Business.
-- Autenticación y control de acceso.
-- Categorías adicionales diferentes a la torta personalizada.
-
-## Requisitos
-
-- Node.js
-- npm
-
-## Instalación
-
-```bash
-npm install
+```powershell
+npm ci
+npm run verify
+npm start
 ```
 
-## Ejecución
+Abre http://localhost:3001. Mantén abierta la terminal mientras usas la aplicación.
 
-```bash
-npm run dev
-```
+## Limitaciones
 
-## Verificaciones
-
-Compilación de producción:
-
-```bash
-npm run build
-```
-
-Verificación de tipos:
-
-```bash
-npm run typecheck
-```
-
-Formato:
-
-```bash
-npm run format
-```
-
-En este momento no se declara un `npm test` porque el repositorio todavía no contiene una suite automatizada de pruebas. La cobertura de los casos de aceptación del incremento queda registrada como trabajo pendiente en el Issue correspondiente.
+- El chat es una simulación web; no está conectado a WhatsApp Business Platform.
+- La interpretación de texto se basa en reglas y patrones conocidos; no comprende cualquier mensaje posible.
+- La persistencia es local en JSON, no una base de datos compartida para un despliegue multiusuario.
+- La autenticación administrativa y la analítica avanzada no forman parte de este incremento.
+- Antes de declarar la entrega cerrada, ejecutar la regresión y el recorrido E2E de la versión final, guardar capturas reales y completar la revisión cruzada del pull request.
 
 ## Flujo de trabajo
 
-La rama estable es `main`.
-
-Las ramas de trabajo siguen esta convención:
-
-```text
-feature/<tarea-corta>
-fix/<tarea-corta>
-test/<tarea-corta>
-docs/<tarea-corta>
-```
-
-Los cambios importantes se integran mediante Pull Request y revisión antes de llegar a `main`.
+La rama estable es `main`. Los cambios deben proponerse mediante ramas y pull requests. No marcar una historia como terminada solo porque el código está escrito: las pruebas, la revisión y la integración también deben comprobarse.
 
 ## Equipo
-
-Gemas de Cristal
 
 - Steven Suaza Montiel
 - Isabel Cristina Duque Cano
 
-## Repositorio
+## Documentación
 
-https://github.com/isabel097/pedidosFlow
+- [Planeación del incremento 1](docs/PLANEACION_INCREMENTO_1.md)
+- [Cierre del incremento 2](docs/INCREMENTO_2_CIERRE.md)
+- [Evidencias del incremento 2](docs/EVIDENCIAS_INCREMENTO_2.md)
+- [Documentación técnica y pruebas](docs/)
+- [Repositorio](https://github.com/isabel097/pedidosFlow)
