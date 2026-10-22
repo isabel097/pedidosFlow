@@ -22,6 +22,10 @@ npm run
 
 El paquete correcto debe identificarse como `pedidosflow@1.0.0` y mostrar `verify`, `test`, `typecheck` y `start`. Si aparece `figma-make-app@1.0.0` o `Missing script: verify`, se está ejecutando desde el prototipo visual o desde una carpeta distinta a la raíz del servidor. El modo más sencillo es ejecutar `INICIAR_PEDIDOSFLOW.bat` situado junto a `src\index.ts` y el `package.json` funcional.
 
+## Comprobación local reportada el 22 de octubre de 2026
+
+`npm run` se ejecutó desde la raíz funcional y confirmó que `pedidosflow@1.0.0` define el script `verify`. Después, `npm ci` falló con `EPERM` al intentar eliminar `node_modules/@esbuild/win32-x64/esbuild.exe`. La instalación quedó incompleta; `npm run verify` no encontró `express` y `npm start` no encontró `tsx`. Es una comprobación real con bloqueo de entorno, no una regresión aprobada. Cierra los procesos Node que puedan seguir activos, elimina `node_modules`, ejecuta `npm ci` hasta que finalice sin errores y entonces repite `npm run verify`.
+
 ## Verificación en el computador del equipo
 
 - [ ] Desde la raíz funcional, ejecutar `npm ci`.
