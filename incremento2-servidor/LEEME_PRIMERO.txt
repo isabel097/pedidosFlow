@@ -1,0 +1,43 @@
+PEDIDOSFLOW - INCREMENTO 2
+
+INICIO RAPIDO EN WINDOWS
+1. Esta carpeta es la raiz del servidor funcional. Deben coexistir package.json, src\index.ts e INICIAR_PEDIDOSFLOW.bat.
+2. Haz doble clic en INICIAR_PEDIDOSFLOW.bat. La primera vez requiere internet para instalar dependencias.
+3. Cuando aparezca el mensaje de servidor iniciado, abre http://localhost:3001.
+4. Mantén abierta la ventana de terminal mientras usas la aplicación.
+
+Si ejecutas comandos manualmente, abre PowerShell en ESTA carpeta y corre:
+  npm ci
+  npm run verify
+  npm start
+
+En esta raíz, `npm run` debe identificar el paquete como pedidosflow@1.0.0 y mostrar los scripts start, test, typecheck y verify. Si aparece figma-make-app@1.0.0 o Missing script: verify, estás en la subcarpeta prototipo-figma o en la carpeta exterior equivocada.
+
+La primera ejecución carga cinco pedidos ficticios (#152-#156) si la carpeta de datos está nueva o vacía. No se duplican ni se restablecen los cambios guardados al reiniciar. Estos son datos de demostración, no clientes reales.
+
+El chat es una simulación web; todavía no conecta con WhatsApp Business Platform.
+
+DOCUMENTACION
+- docs\SEGUNDO_AVANCE_PEDIDOSFLOW.pdf / .docx
+- docs\INCREMENTO_2_CIERRE.md
+- docs\EVIDENCIAS_INCREMENTO_2.md
+- docs\JUSTIFICACION_EVIDENCIA_DOCUMENTAL.md
+- docs\PRUEBAS.md
+
+
+SI npm ci FALLA CON EPERM Y MENCIONA esbuild.exe
+1. Cierra otras terminales que tengan el servidor ejecutándose y cierra VS Code si su terminal usa este proyecto.
+2. En PowerShell, desde esta carpeta, ejecuta:
+   Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+   Remove-Item -Recurse -Force .\node_modules
+   npm ci
+3. Solo cuando npm ci finalice sin errores, ejecuta npm run verify y después npm start.
+4. Si Windows sigue bloqueando un archivo, reinicia el equipo y repite antes de abrir otras aplicaciones.
+
+
+PUBLICAR EL SERVIDOR EN GITHUB SIN MODIFICAR main
+1. Necesitas Git for Windows instalado y la cuenta/autenticacion de GitHub disponible para git push. No copies contrasenas ni tokens a ningun archivo.
+2. Desde esta raiz, ejecuta SUBIR_CODIGO_A_GITHUB.bat.
+3. El script clona el repositorio, comprueba que la rama de implementacion existente no tenga cambios distintos de main, copia el servidor bajo incremento2-servidor y publica la rama feature/servidor-incremento-2.
+4. El script no hace merge a main. Despues de publicar la rama, revisa la ejecucion automatica y abre un Pull Request para revision.
+5. Si la rama remota ya contiene cambios distintos de main, el script se detiene para no sobrescribirlos.
