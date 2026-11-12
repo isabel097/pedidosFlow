@@ -18,8 +18,11 @@ import {
   validarFormatoHora
 } from './reglas.js';
 import {
+  CANAL_POR_DEFECTO,
+  CANALES,
   Cambio,
   Campo,
+  Canal,
   Configuracion,
   DecisionRegla,
   ETAPAS,
@@ -235,6 +238,9 @@ export function crearServidor(almacen: Almacen, opciones: OpcionesServidor = {})
     const b = req.body ?? {};
     const campo = b.campo as Campo;
     if (!CAMPOS.includes(campo)) throw new ErrorHttp(400, 'Campo de cambio no válido. Use Cantidad, Diseño o Fecha de entrega.');
+    // El canal indica por dónde llegó la solicitud. Si no se envía, es la plataforma web.
+    const canal = (b.canal ?? CANAL_POR_DEFECTO) as Canal;
+    if (!CANALES.includes(canal)) throw new ErrorHttp(400, `Canal no válido. Use ${CANALES.join(' o ')}.`);
     const cfg = almacen.configuracion;
 
     let valorNuevo: ValorNuevo = {};
@@ -305,6 +311,7 @@ export function crearServidor(almacen: Almacen, opciones: OpcionesServidor = {})
       pedidoId: pedido.id,
       campo,
       origen: 'cambio',
+      canal,
       etapa,
       pasosCompletados: pasosCompletados(pedido.checklist),
       detalleAnterior,

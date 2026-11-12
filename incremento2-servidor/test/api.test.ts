@@ -448,3 +448,41 @@ test('CP-45 mis pedidos: teléfono inválido → 400 y no se filtra', () =>
     assert.equal((await pedir(e, 'GET', '/api/pedidos?telefono=abc')).estado, 400);
     assert.equal((await pedir(e, 'GET', '/api/pedidos')).json.length, 5);
   }));
+
+// ── Canal de la solicitud (Incremento 3: HU-09) ───────────────────────────────
+test('CP-48 canal: un cambio sin canal se registra como web', () =>
+  conEntorno(async e => {
+    const r = await pedir(e, 'POST', '/api/pedidos/154/cambios', { campo: 'Cantidad', valorNuevo: 25 });
+    assert.equal(r.estado, 201);
+    assert.equal(r.json.cambio.canal, 'web');
+  }));
+
+test('CP-49 canal: un cambio enviado por telegram guarda el canal y aparece en el historial', () =>
+  conEntorno(async e => {
+    const r = await pedir(e, 'POST', '/api/pedidos/154/cambios', { campo: 'Cantidad', valorNuevo: 25, canal: 'telegram' });
+    assert.equal(r.estado, 201);
+    assert.equal(r.json.evaluacion.resultado, 'aplicado');
+    assert.equal(r.json.cambio.canal, 'telegram');
+    const historial = await pedir(e, 'GET', '/api/cambios');
+    assert.equal(historial.json[0].pedidoId, '154');
+    assert.equal(historial.json[0].canal, 'telegram');
+  }));
+
+test('CP-50 canal: un canal desconocido → 400 y no se registra ni se modifica nada', () =>
+  conEntorno(async e => {
+    const antes = (await pedir(e, 'GET', '/api/cambios')).json.length;
+    const r = await pedir(e, 'POST', '/api/pedidos/154/cambios', { campo: 'Cantidad', valorNuevo: 25, canal: 'fax' });
+    assert.equal(r.estado, 400);
+    assert.match(r.json.error, /Canal no válido/);
+    assert.equal((await pedir(e, 'GET', '/api/pedidos/154')).json.cantidad, 20);
+    assert.equal((await pedir(e, 'GET', '/api/cambios')).json.length, antes);
+  }));
+
+test('CP-51 canal: telegram no cambia la decisión; #155 en producción sigue yendo a revisión', () =>
+  conEntorno(async e => {
+    const r = await pedir(e, 'POST', '/api/pedidos/155/cambios', { campo: 'Cantidad', valorNuevo: 30, canal: 'telegram' });
+    assert.equal(r.estado, 201);
+    assert.equal(r.json.evaluacion.resultado, 'pendiente-revision');
+    assert.equal(r.json.pedido.cantidad, 20);
+    assert.equal(r.json.cambio.canal, 'telegram');
+  }));
