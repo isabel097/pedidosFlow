@@ -7,13 +7,15 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "start": "tsx src/index.ts",
+    "bot": "tsx src/bot.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "build:css": "tailwindcss -i web/estilos.css -o public/estilos.css --minify",
     "verify": "npm run typecheck && npm test"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "grammy": "^1.46.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
