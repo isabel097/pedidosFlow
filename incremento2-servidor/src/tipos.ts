@@ -24,6 +24,7 @@ export interface Pedido {
   fotoUrl?: string; // foto opcional de referencia para diseño personalizado
   descripcionDiseno?: string; // descripción libre del diseño fuera del catálogo
   cancelado?: boolean;
+  canal?: Canal; // canal por el que se creó el pedido; los anteriores al Incremento 3 no lo traen (se tratan como 'web')
   creadoEn: string;
 }
 

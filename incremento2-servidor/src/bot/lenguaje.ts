@@ -175,7 +175,7 @@ const RE_FECHA = /\b(fecha|entrega|entregar|entregan|entregas|dia|reprogramar|re
 const RE_DISENO = /\b(diseno|disenos|decoracion|decorar|estilo|foto|imagen|dibujo|sabor|relleno)\b/;
 const RE_CAMBIO = /\b(cambi\w*|modific\w*|mov\w*|mueve\w*|adelant\w*|atras\w*|reprogram\w*|aplaz\w*|pospon\w*|aument\w*|sub\w*|baj\w*|reduc\w*|disminu\w*|ampli\w*|ajust\w*|actualiz\w*|pasar|pasa|pasarlo|poner|ponle|pon|seran|serian|ahora son)\b/;
 const RE_CONSULTA = /\b(consult\w*|ver|revis\w*|estado|como (?:va|esta|van|vamos|anda)\w*|en que (?:va|etapa|estado|anda)|etapa|avance|progreso|donde (?:va|esta|anda)|cuando (?:es|llega|entregan|me entregan|lo entregan)|para cuando|saber|informacion|info)\b/;
-const RE_CREAR = /\b(nuevo pedido|hacer (?:un )?pedido|crear (?:un )?pedido|realizar (?:un )?pedido|pedir (?:una|un) torta|encargar|encargo|quiero (?:una|un) torta|ordenar)\b/;
+const RE_CREAR = /\b(nuevo pedido|(?:hacer|crear|realizar|registrar) (?:un |mi )?pedido|pedir (?:una|un) torta|encargar\w*|encargo|quiero (?:una|un) (?:torta|pedido)|quisiera (?:hacer )?(?:una|un) (?:torta|pedido)|necesito (?:una|un) (?:torta|pedido)|me gustaria (?:pedir|hacer|encargar)|comprar (?:una|un) torta|ordenar)\b/;
 const RE_CANCELAR = /\b(cancel\w*|anular|anula)\b.*\bpedido\b|\bpedido\b.*\b(cancel\w*|anular|anula)\b/;
 const RE_SALUDO = /^(hola|holi|holis|buenas|buenos dias|buenas tardes|buenas noches|hey|ey|saludos|que mas|como estas)\b/;
 const RE_AYUDA = /\b(ayuda|ayudame|help|menu|opciones|que puedes hacer|que haces|como funciona|comandos)\b/;
@@ -228,4 +228,42 @@ export function interpretarSiNo(texto: string): 'si' | 'no' | null {
 
 export function pideElMismoPedido(texto: string): boolean {
   return /\b(el mismo|ese|ese mismo|el ultimo|el anterior|el de antes)\b/.test(normalizar(texto));
+}
+
+// ── Datos del flujo para crear un pedido ─────────────────────────────────────
+
+/** Nombre de la persona. Acepta «me llamo Ana Pérez» o solo «Ana Pérez»; rechaza números y símbolos. */
+export function limpiarNombre(texto: string): string | null {
+  const t = String(texto ?? '').trim().replace(/\s+/g, ' ');
+  const sinPrefijo = t.replace(/^(?:me llamo|mi nombre es|soy|a nombre de|el nombre es|nombre)\s+/i, '').trim();
+  return /^[\p{L}][\p{L}\s'.-]{1,79}$/u.test(sinPrefijo) ? sinPrefijo : null;
+}
+
+/** Teléfono con el mismo formato que acepta el servidor (7 a 20 dígitos, espacios o guiones, + opcional). */
+export function extraerTelefono(texto: string): string | null {
+  const m = String(texto ?? '').match(/\+?\d[\d\s-]{5,18}\d/);
+  if (!m) return null;
+  const t = m[0].trim();
+  return /^\+?[\d\s-]{7,20}$/.test(t) ? t : null;
+}
+
+/** Hora de entrega. Si a la persona le da igual, se usa el mediodía, que es la hora por defecto del sistema. */
+export function interpretarHoraPedido(texto: string): string | null {
+  if (/\b(cualquiera|da igual|me da igual|no importa|sin preferencia|cualquier hora)\b/.test(normalizar(texto))) return '12:00';
+  return interpretarHora(texto);
+}
+
+export type EleccionDiseno = { tipo: 'catalogo'; id: string; nombre: string } | { tipo: 'personalizado' };
+
+export function elegirDiseno(texto: string, catalogo: Array<{ id: string; nombre: string }>): EleccionDiseno | null {
+  const n = normalizar(texto);
+  if (/\b(personalizad\w*|propio|propia|otro|otra|diferente|foto|imagen|mi diseno)\b/.test(n)) return { tipo: 'personalizado' };
+  const escapar = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const hallado = catalogo.find(e => new RegExp(`\\b${escapar(normalizar(e.nombre))}\\b`).test(n) || n === e.id);
+  return hallado ? { tipo: 'catalogo', id: hallado.id, nombre: hallado.nombre } : null;
+}
+
+/** Palabras que cortan el flujo en cualquier paso (incluidos los de texto libre, donde un «no» puede ser parte de la respuesta). */
+export function quiereCancelar(texto: string): boolean {
+  return /\b(cancelar|cancela|cancelo|olvidalo|dejalo|salir)\b/.test(normalizar(texto));
 }

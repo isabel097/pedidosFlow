@@ -160,7 +160,9 @@ test('CP-66 bot: /start y /ayuda muestran los comandos; un texto o comando desco
 test('CP-67 bot: si el sistema no responde, contesta con un mensaje amable y no lanza errores', async () => {
   const caido: ClienteApi = {
     consultarPedido: async () => { throw new Error('ECONNREFUSED'); },
-    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); }
+    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); },
+    crearPedido: async () => { throw new Error('ECONNREFUSED'); },
+    obtenerConfiguracion: async () => { throw new Error('ECONNREFUSED'); }
   };
   assert.match(await procesarMensaje('/consultar 154', caido), /No puedo comunicarme con el sistema/);
   assert.match(await procesarMensaje('/cantidad 154 30', caido), /No puedo comunicarme con el sistema/);
@@ -169,7 +171,9 @@ test('CP-67 bot: si el sistema no responde, contesta con un mensaje amable y no 
 test('CP-68 bot: una respuesta inesperada del sistema (500) no se muestra tal cual', async () => {
   const roto: ClienteApi = {
     consultarPedido: async () => ({ estado: 500, json: { error: 'detalle interno' } }),
-    solicitarCambio: async () => ({ estado: 500, json: null })
+    solicitarCambio: async () => ({ estado: 500, json: null }),
+    crearPedido: async () => ({ estado: 500, json: null }),
+    obtenerConfiguracion: async () => ({ estado: 500, json: null })
   };
   const r = await procesarMensaje('/consultar 154', roto);
   assert.match(r, /Ocurrió un problema en el sistema/);

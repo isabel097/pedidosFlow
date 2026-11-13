@@ -8,22 +8,26 @@ export interface RespuestaApi {
 export interface ClienteApi {
   consultarPedido(id: string): Promise<RespuestaApi>;
   solicitarCambio(id: string, cuerpo: Record<string, unknown>): Promise<RespuestaApi>;
+  crearPedido(cuerpo: Record<string, unknown>): Promise<RespuestaApi>;
+  obtenerConfiguracion(): Promise<RespuestaApi>;
 }
 
 const CANAL: Canal = 'telegram';
 
 export const TEXTO_AYUDA = [
   'Hola, soy el asistente de PedidosFlow. Puedes escribirme con tus palabras, por ejemplo:',
+  '• «Quiero hacer un pedido»',
   '• «Quiero consultar el pedido 154»',
   '• «Cambia la cantidad del pedido 154 a 40 personas»',
   '• «Mueve la entrega del pedido 154 al 20 de noviembre»',
   '',
   'También puedes usar comandos:',
+  '/pedido - hacer un pedido nuevo',
   '/consultar 154 - ver el estado de tu pedido',
   '/cantidad 154 40 - pedir cambiar la cantidad de personas',
   '/fecha 154 2026-11-20 - pedir cambiar la fecha de entrega (puedes agregar la hora, por ejemplo 15:00)',
   '',
-  'Cambia 154 por el número de tu pedido. Cambiar el diseño o crear pedidos nuevos, por ahora, solo se puede en el chat web.'
+  'Cambia 154 por el número de tu pedido. Para cambiar el diseño de un pedido o cancelarlo, por ahora, comunícate directamente con la pastelería.'
 ].join('\n');
 
 export const MENSAJE_SIN_CONEXION = 'No puedo comunicarme con el sistema en este momento. Inténtalo más tarde.';

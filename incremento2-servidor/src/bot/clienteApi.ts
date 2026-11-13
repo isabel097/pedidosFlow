@@ -26,6 +26,8 @@ export function crearClienteApi(baseUrl: string): ClienteApi {
 
   return {
     consultarPedido: id => llamar('GET', `/api/pedidos/${encodeURIComponent(id)}`),
-    solicitarCambio: (id, cuerpo) => llamar('POST', `/api/pedidos/${encodeURIComponent(id)}/cambios`, cuerpo)
+    solicitarCambio: (id, cuerpo) => llamar('POST', `/api/pedidos/${encodeURIComponent(id)}/cambios`, cuerpo),
+    crearPedido: cuerpo => llamar('POST', '/api/pedidos', cuerpo),
+    obtenerConfiguracion: () => llamar('GET', '/api/configuracion')
   };
 }

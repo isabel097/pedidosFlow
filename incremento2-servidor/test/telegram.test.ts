@@ -4,7 +4,8 @@ import type { Bot } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
 import { iniciarEntorno, pedir } from './ayudas.js';
 import { crearClienteApi } from '../src/bot/clienteApi.js';
-import { procesarMensaje, type ClienteApi } from '../src/bot/comandos.js';
+import { type ClienteApi } from '../src/bot/comandos.js';
+import { Conversaciones } from '../src/bot/conversacion.js';
 import { COMANDOS_MENU, MENSAJE_SOLO_TEXTO, crearBot, ocultarToken } from '../src/bot/telegram.js';
 
 // Estas pruebas recorren el camino completo del bot (Telegram → grammy → lógica → servidor real),
@@ -100,7 +101,9 @@ test('CP-73 telegram: en un grupo no responde a mensajes que no son texto', () =
 test('CP-74 telegram: si el servidor no responde, el bot sigue contestando con un mensaje amable', async () => {
   const caido: ClienteApi = {
     consultarPedido: async () => { throw new Error('ECONNREFUSED'); },
-    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); }
+    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); },
+    crearPedido: async () => { throw new Error('ECONNREFUSED'); },
+    obtenerConfiguracion: async () => { throw new Error('ECONNREFUSED'); }
   };
   const { bot, enviados } = crearBotSimulado(caido);
   await bot.handleUpdate(mensaje({ text: '/consultar 154' }));
@@ -110,11 +113,14 @@ test('CP-74 telegram: si el servidor no responde, el bot sigue contestando con u
 test('CP-75 telegram: todos los comandos del menú de Telegram son comandos que el bot entiende', async () => {
   const api: ClienteApi = {
     consultarPedido: async () => ({ estado: 404, json: null }),
-    solicitarCambio: async () => ({ estado: 404, json: null })
+    solicitarCambio: async () => ({ estado: 404, json: null }),
+    crearPedido: async () => ({ estado: 404, json: null }),
+    obtenerConfiguracion: async () => ({ estado: 404, json: null })
   };
-  assert.deepEqual(COMANDOS_MENU.map(c => c.command).sort(), ['ayuda', 'cantidad', 'consultar', 'fecha']);
+  assert.deepEqual(COMANDOS_MENU.map(c => c.command).sort(), ['ayuda', 'cantidad', 'consultar', 'fecha', 'pedido']);
   for (const c of COMANDOS_MENU) {
-    assert.doesNotMatch(await procesarMensaje(`/${c.command}`, api), /No conozco ese comando/);
+    const conversaciones = new Conversaciones(api);
+    assert.doesNotMatch((await conversaciones.atender(1, `/${c.command}`)).texto, /No conozco ese comando/);
   }
 });
 

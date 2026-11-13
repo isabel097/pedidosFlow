@@ -1,17 +1,20 @@
 # Bot de Telegram (Incremento 3)
 
-El bot permite al cliente consultar su pedido y pedir cambios de cantidad o fecha desde Telegram,
+El bot permite al cliente hacer un pedido nuevo, consultarlo y pedir cambios de cantidad o fecha desde Telegram,
 con comandos o escribiendo con sus propias palabras. No contiene reglas de negocio: traduce cada
 mensaje a una llamada a la API de PedidosFlow y muestra la decisión del mismo motor de validación
 que usa la plataforma web.
 
-> **Alcance.** El Mapa de evolución dejó el texto libre fuera del corte mínimo del Incremento 3
-> (solo comandos). El equipo lo agregó después, por reglas y sin IA; esta página describe lo implementado.
+> **Alcance.** El Mapa de evolución limitó el corte mínimo del Incremento 3 a consultar y cambiar cantidad o fecha
+> con comandos, y dejó el texto libre para después. El equipo agregó después, por decisión propia, el lenguaje
+> normal (por reglas, sin IA) y la creación de pedidos, porque el chat es el canal del cliente y sin ellos
+> no podía hacer pedidos. Esta página describe lo implementado.
 
 ## Comandos
 
 | Comando | Qué hace | Criterio |
 | --- | --- | --- |
+| `/pedido` | Inicia el registro de un pedido nuevo, paso a paso | — |
 | `/consultar 154` | Muestra el estado y la etapa de producción del pedido | CA-1 |
 | `/cantidad 154 40` | Pide cambiar la cantidad; responde aplicado, en revisión o rechazado | CA-2, CA-3 |
 | `/fecha 154 2026-11-20 [15:00]` | Pide cambiar la fecha de entrega (la hora es opcional) | CA-2, CA-3 |
@@ -44,6 +47,24 @@ Cómo se comporta:
 No es inteligencia artificial: son reglas de texto (`src/bot/lenguaje.ts`). Solo extraen datos del mensaje; la decisión de
 aplicar, enviar a revisión o rechazar un cambio sigue siendo del motor de validación del servidor.
 
+## Hacer un pedido
+
+El cliente escribe «quiero hacer un pedido» (o «quiero una torta», o usa `/pedido`) y el bot pregunta, de a un dato por vez:
+
+1. Nombre y teléfono de contacto.
+2. Cantidad de personas.
+3. Diseño: uno del catálogo (botones) o «Diseño personalizado», que se describe con palabras y/o una foto de referencia.
+4. Fecha y hora de entrega («cualquiera» deja el mediodía, que es la hora por defecto del sistema).
+
+Si el primer mensaje ya trae datos («una torta para 30 personas el 20 de noviembre a las 3 pm»), solo pregunta lo que falta.
+Antes de registrar, muestra un resumen y pide confirmar; el pedido se envía al servidor solo después del «sí».
+Cada dato se valida con las mismas reglas del servidor (cantidad máxima, fecha no anterior a hoy, formato de hora).
+Se puede cancelar en cualquier paso escribiendo «cancelar» (o con «no» en los pasos de respuesta corta).
+
+- El pedido queda registrado con el canal `telegram`, y al cliente se le entrega el número que usará para consultarlo.
+- Un diseño personalizado, con o sin foto, queda **pendiente de revisión** del encargado, igual que en el chat web.
+- La foto se descarga desde Telegram y se envía al servidor como imagen; solo se usa en el paso del diseño personalizado.
+
 ## Cómo ejecutarlo
 
 1. Crear el bot con `@BotFather` en Telegram (`/newbot`) y copiar el token.
@@ -68,8 +89,10 @@ La ejecución real en Telegram se registra aparte, con capturas del chat.
 - El bot **no verifica quién escribe**: cualquiera que conozca el bot y un número de pedido puede consultarlo
   o pedir cambios. Por eso la consulta no muestra nombre ni teléfono del cliente. Vincular el chat con el
   teléfono del cliente queda como mejora futura.
-- Entiende las frases habituales para consultar y cambiar cantidad o fecha, pero no cualquier redacción: si no
-  entiende, lo dice y sugiere ejemplos. Los cambios de diseño, la creación y la cancelación de pedidos siguen
-  disponibles únicamente en el chat web.
+- Entiende las frases habituales para hacer pedidos, consultarlos y cambiar cantidad o fecha, pero no cualquier
+  redacción: si no entiende, lo dice y sugiere ejemplos.
+- Por Telegram todavía no se puede cambiar el diseño de un pedido existente ni cancelarlo: el bot indica que se
+  pida directamente a la pastelería. (El chat web simulado sí tiene el cambio de diseño.)
+- El bot no verifica quién es el cliente: los datos del pedido (nombre y teléfono) son los que la persona escribe.
 - La memoria de la conversación está solo en el programa (se pierde al reiniciar el bot).
 - Funciona por *long polling*: solo responde mientras `npm run bot` esté corriendo en el computador.

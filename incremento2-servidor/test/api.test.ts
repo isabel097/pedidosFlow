@@ -486,3 +486,38 @@ test('CP-51 canal: telegram no cambia la decisión; #155 en producción sigue ye
     assert.equal(r.json.pedido.cantidad, 20);
     assert.equal(r.json.cambio.canal, 'telegram');
   }));
+
+// ── Canal al crear un pedido (Incremento 3) ──────────────────────────────────
+const PEDIDO_NUEVO = { cliente: 'Ana Pérez', telefono: '300 123 4567', cantidad: 30, fechaEntrega: '2026-11-20', horaEntrega: '15:00', tipo: 'catalogo', estiloId: 'floral' };
+
+test('CP-105 canal: un pedido creado sin canal se registra como web', () =>
+  conEntorno(async e => {
+    const r = await pedir(e, 'POST', '/api/pedidos', PEDIDO_NUEVO);
+    assert.equal(r.estado, 201);
+    assert.equal(r.json.canal, 'web');
+  }));
+
+test('CP-106 canal: un pedido creado por telegram guarda el canal, también en su revisión de diseño personalizado', () =>
+  conEntorno(async e => {
+    const catalogo = await pedir(e, 'POST', '/api/pedidos', { ...PEDIDO_NUEVO, canal: 'telegram' });
+    assert.equal(catalogo.estado, 201);
+    assert.equal(catalogo.json.canal, 'telegram');
+    assert.equal((await pedir(e, 'GET', `/api/pedidos/${catalogo.json.id}`)).json.canal, 'telegram');
+
+    const personalizado = await pedir(e, 'POST', '/api/pedidos', {
+      ...PEDIDO_NUEVO, tipo: 'personalizado', estiloId: undefined, descripcionDiseno: 'Torta de unicornio con arcoíris', canal: 'telegram'
+    });
+    assert.equal(personalizado.estado, 201);
+    const cambio = (await pedir(e, 'GET', '/api/cambios')).json.find((c: any) => c.pedidoId === personalizado.json.id);
+    assert.equal(cambio.canal, 'telegram');
+    assert.equal(cambio.resultado, 'pendiente-revision');
+  }));
+
+test('CP-107 canal: un canal desconocido al crear un pedido → 400 y no se crea nada', () =>
+  conEntorno(async e => {
+    const antes = (await pedir(e, 'GET', '/api/pedidos')).json.length;
+    const r = await pedir(e, 'POST', '/api/pedidos', { ...PEDIDO_NUEVO, canal: 'fax' });
+    assert.equal(r.estado, 400);
+    assert.match(r.json.error, /Canal no válido/);
+    assert.equal((await pedir(e, 'GET', '/api/pedidos')).json.length, antes);
+  }));

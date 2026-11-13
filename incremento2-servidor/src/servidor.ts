@@ -156,6 +156,8 @@ export function crearServidor(almacen: Almacen, opciones: OpcionesServidor = {})
     const b = req.body ?? {};
     const cliente = String(b.cliente ?? '').trim();
     const telefono = String(b.telefono ?? '').trim();
+    const canal = (b.canal ?? CANAL_POR_DEFECTO) as Canal;
+    if (!CANALES.includes(canal)) throw new ErrorHttp(400, `Canal no válido. Use ${CANALES.join(' o ')}.`);
     if (cliente.length < 2 || cliente.length > 80) throw new ErrorHttp(400, 'El nombre del cliente es obligatorio (2 a 80 caracteres).');
     if (!/^\+?[\d\s-]{7,20}$/.test(telefono)) throw new ErrorHttp(400, 'El teléfono no es válido.');
     const cantidad = validarFormatoCantidad(b.cantidad);
@@ -197,10 +199,12 @@ export function crearServidor(almacen: Almacen, opciones: OpcionesServidor = {})
       disenoTipo: tipo,
       ...(fotoUrl ? { fotoUrl } : {}),
       ...(descripcionDiseno ? { descripcionDiseno } : {}),
+      canal,
       creadoEn: ahora().toISOString()
     };
     almacen.pedidos.unshift(pedido);
-    notificar('Nuevo pedido recibido', `Pedido #${pedido.id} – ${pedido.cliente}`, 'info', cfg.bot.notificarNuevoPedido);
+    const etiquetaCanal = canal === 'telegram' ? ' · Telegram' : '';
+    notificar('Nuevo pedido recibido', `Pedido #${pedido.id} – ${pedido.cliente}${etiquetaCanal}`, 'info', cfg.bot.notificarNuevoPedido);
 
     if (tipo === 'personalizado') {
       // Cualquier diseño fuera del catálogo requiere siempre criterio humano, tenga foto o descripción.
@@ -210,6 +214,7 @@ export function crearServidor(almacen: Almacen, opciones: OpcionesServidor = {})
         pedidoId: pedido.id,
         campo: 'Diseño',
         origen: 'nuevo-pedido',
+        canal,
         etapa: 'Antes de producción',
         pasosCompletados: 0,
         detalleAnterior: 'Nuevo pedido',

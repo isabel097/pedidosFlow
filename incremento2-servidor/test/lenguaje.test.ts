@@ -216,10 +216,9 @@ test('CP-91 lenguaje CA-4: un pedido inexistente se informa sin pedir más datos
     assert.equal(await cambiosNuevos(e), 0);
   }));
 
-test('CP-92 lenguaje: diseño, crear y cancelar pedidos se derivan al chat web sin registrar nada', () =>
+test('CP-92 lenguaje: cambiar el diseño o cancelar un pedido se deriva a la pastelería sin registrar nada', () =>
   conLenguaje(async (e, escribir) => {
-    assert.match((await escribir('quiero cambiar el diseño de mi torta')).texto, /solo se puede en el chat web/);
-    assert.match((await escribir('quiero hacer un pedido nuevo')).texto, /solo se puede en el chat web/);
+    assert.match((await escribir('quiero cambiar el diseño de mi torta')).texto, /comunícate directamente con la pastelería/);
     assert.match((await escribir('quiero cancelar el pedido 154')).texto, /no está disponible en este chat/);
     assert.equal(await cambiosNuevos(e), 0);
   }));
@@ -306,7 +305,9 @@ test('CP-102 lenguaje: cada chat tiene su propia conversación', () =>
 test('CP-103 lenguaje: si el servidor no responde, el bot contesta con un mensaje amable', async () => {
   const caido: ClienteApi = {
     consultarPedido: async () => { throw new Error('ECONNREFUSED'); },
-    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); }
+    solicitarCambio: async () => { throw new Error('ECONNREFUSED'); },
+    crearPedido: async () => { throw new Error('ECONNREFUSED'); },
+    obtenerConfiguracion: async () => { throw new Error('ECONNREFUSED'); }
   };
   const conversaciones = new Conversaciones(caido, () => AHORA_FIJO);
   assert.match((await conversaciones.atender(1, 'quiero consultar el pedido 154')).texto, /No puedo comunicarme con el sistema/);
@@ -317,7 +318,7 @@ test('CP-103 lenguaje: si el servidor no responde, el bot contesta con un mensaj
 test('CP-104 telegram: la confirmación llega con botones y el resto de respuestas los quita', () =>
   conLenguaje(async e => {
     const info = { id: 1, is_bot: true, first_name: 'PedidosFlow', username: 'PedidosFlowBot' } as unknown as UserFromGetMe;
-    const bot = crearBot('123456:TOKEN-FALSO-SOLO-PARA-PRUEBAS', crearClienteApi(e.base), info, () => AHORA_FIJO);
+    const bot = crearBot('123456:TOKEN-FALSO-SOLO-PARA-PRUEBAS', crearClienteApi(e.base), info, { ahora: () => AHORA_FIJO });
     const enviados: any[] = [];
     bot.api.config.use(async (_s, metodo, payload) => {
       enviados.push({ metodo, payload });
