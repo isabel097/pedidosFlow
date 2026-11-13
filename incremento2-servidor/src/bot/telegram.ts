@@ -1,6 +1,7 @@
-import { Bot } from 'grammy';
+import { Bot, Keyboard } from 'grammy';
 import type { UserFromGetMe } from 'grammy/types';
-import { procesarMensaje, type ClienteApi } from './comandos.js';
+import type { ClienteApi } from './comandos.js';
+import { Conversaciones } from './conversacion.js';
 
 export const MENSAJE_SOLO_TEXTO = 'Por ahora solo entiendo mensajes de texto. Escribe /ayuda para ver los comandos.';
 
@@ -19,14 +20,19 @@ export function ocultarToken(texto: string, token: string): string {
 
 /**
  * Conecta Telegram con la lógica del bot. Aquí no hay reglas de negocio:
- * cada mensaje de texto se entrega a procesarMensaje y su respuesta se envía al mismo chat.
- * botInfo solo se pasa en las pruebas, para no consultar a Telegram.
+ * cada mensaje de texto se entrega a la conversación (comandos o lenguaje normal) y su respuesta se envía al mismo chat.
+ * botInfo y ahora solo se pasan en las pruebas, para no consultar a Telegram y para fijar la fecha.
  */
-export function crearBot(token: string, api: ClienteApi, botInfo?: UserFromGetMe): Bot {
+export function crearBot(token: string, api: ClienteApi, botInfo?: UserFromGetMe, ahora?: () => Date): Bot {
   const bot = new Bot(token, botInfo ? { botInfo } : undefined);
+  const conversaciones = new Conversaciones(api, ahora);
 
   bot.on('message:text', async ctx => {
-    await ctx.reply(await procesarMensaje(ctx.message.text, api));
+    const r = await conversaciones.atender(ctx.chat.id, ctx.message.text);
+    const teclado = r.opciones
+      ? new Keyboard().text(r.opciones[0]).text(r.opciones[1]).oneTime().resized()
+      : { remove_keyboard: true as const };
+    await ctx.reply(r.texto, { reply_markup: teclado });
   });
 
   // Fotos, stickers, audios, etc.: solo se responde en chats privados, para no molestar en grupos.
